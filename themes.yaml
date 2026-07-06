@@ -1,0 +1,128 @@
+# =============================================================
+# themes.yaml — โครงสร้างธีมของ dashboard
+# แก้ไฟล์นี้เพื่อเพิ่ม/ลดธีม, ETF หรือหุ้นรายตัวได้เลย
+#
+# โครงสร้างแต่ละธีม:
+#   - name:    ชื่อธีมที่แสดงบน dashboard
+#     etfs:    ETF ตัวแทน (ตัวแรกใช้เป็น "ราคาอ้างอิง" ของธีม
+#              สำหรับ price action / แท่งเทียน)
+#     stocks:  หุ้นรายตัว — คะแนนธีม = ค่าเฉลี่ยแบบ equal-weight
+#              ของหุ้นเหล่านี้ (ถ้าไม่มี stocks จะใช้ ETF แทน)
+# =============================================================
+
+benchmark: SPY
+
+themes:
+  - name: Semiconductors
+    etfs: [SMH, SOXX]
+    stocks: [NVDA, AMD, AVGO, TSM, QCOM, TXN, INTC, MRVL]
+
+  - name: Semi Equip & Memory
+    etfs: [SMH]
+    stocks: [MU, WDC, STX, AMAT, LRCX, KLAC, ASML]
+
+  - name: Software
+    etfs: [IGV, XSW]
+    stocks: [MSFT, ORCL, CRM, ADBE, NOW, PLTR, INTU, SNPS, CDNS]
+
+  - name: Mag 7
+    etfs: [MAGS]
+    stocks: [AAPL, MSFT, NVDA, AMZN, GOOGL, META, TSLA]
+
+  - name: Cybersecurity
+    etfs: [CIBR, HACK, BUG]
+    stocks: [CRWD, PANW, FTNT, ZS, OKTA]
+
+  - name: Genomics
+    etfs: [ARKG, IDNA]
+    stocks: [CRSP, EDIT, BEAM, NTLA, ILMN, RXRX, TWST, PACB]
+
+  - name: Biotech Large
+    etfs: [IBB, XBI]
+    stocks: [AMGN, GILD, VRTX, REGN, BIIB]
+
+  - name: Pharma & Managed Care
+    etfs: [IHE, XLV]
+    stocks: [LLY, UNH, JNJ, MRK, ABBV, PFE]
+
+  - name: Defense
+    etfs: [ITA, XAR, PPA]
+    stocks: [LMT, RTX, NOC, GD, LHX]
+
+  - name: Energy
+    etfs: [XLE, XOP, OIH]
+    stocks: [XOM, CVX, COP, SLB, EOG]
+
+  - name: Banks & Brokers
+    etfs: [KBWB, KBE, IAI]
+    stocks: [JPM, GS, MS, BAC, WFC]
+
+  - name: Staples
+    etfs: [XLP]
+    stocks: [PG, KO, PEP, COST, WMT]
+
+  - name: Utilities & Power
+    etfs: [XLU, GRID]
+    stocks: [NEE, DUK, SO, VST, CEG]
+
+  - name: Materials
+    etfs: [XLB]
+    stocks: [LIN, FCX, NUE, SHW, APD]
+
+  - name: AI Infra & Data Center
+    etfs: [AIQ, DTCR]
+    stocks: [VRT, ETN, ANET, SMCI, DELL, CIEN]
+
+  - name: Quantum
+    etfs: [QTUM]
+    stocks: [IONQ, RGTI, QBTS]
+
+  - name: Nuclear & Uranium
+    etfs: [URA, NLR, URNM]
+    stocks: [CCJ, OKLO, SMR, LEU, BWXT]
+
+  - name: Gold Miners
+    etfs: [GDX, GDXJ, GLD]
+    stocks: [NEM, AEM, GOLD, WPM]
+
+  - name: Solar
+    etfs: [TAN, ICLN]
+    stocks: [FSLR, ENPH, NXT, RUN]
+
+  - name: Crypto-linked
+    etfs: [IBIT, DAPP, WGMI]
+    stocks: [COIN, MSTR, HOOD, MARA, RIOT]
+
+  - name: Space & Drones
+    etfs: [ARKX, UFO]
+    stocks: [RKLB, ASTS, AVAV, KTOS, LUNR]
+
+  - name: China Tech ADR
+    etfs: [KWEB, CQQQ]
+    stocks: [BABA, PDD, BIDU, JD, BEKE]
+
+  - name: Homebuilders
+    etfs: [ITB, XHB]
+    stocks: [DHI, LEN, PHM, TOL, NVR]
+
+  - name: Travel & Airlines
+    etfs: [JETS, PEJ]
+    stocks: [BKNG, ABNB, MAR, DAL, UAL, RCL]
+
+  - name: Fintech & Payments
+    etfs: [IPAY, FINX]
+    stocks: [V, MA, PYPL, AXP, COF]
+
+  # ------- Sector ETF (ไม่มีหุ้นรายตัว ใช้ ETF ตรงๆ) -------
+  - name: Tech (XLK)
+    etfs: [XLK]
+  - name: Financials (XLF)
+    etfs: [XLF]
+  - name: Industrials (XLI)
+    etfs: [XLI]
+  - name: Cons Discret (XLY)
+    etfs: [XLY]
+  - name: Comm Svcs (XLC)
+    etfs: [XLC]
+  - name: Real Estate (XLRE)
+    etfs: [XLRE]

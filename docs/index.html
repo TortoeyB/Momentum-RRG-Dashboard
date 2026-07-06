@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Technical Score Rotation — RRG Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+:root{
+  --bg:#0b0f14; --card:#11161d; --card2:#161c25; --border:#232b36;
+  --ink:#e8eaed; --ink2:#9aa4b2; --ink3:#6b7684;
+  --lead:#22c55e; --imp:#3b82f6; --weak:#f59e0b; --lag:#ef4444;
+  --gold:#eab308; --accent:#f0a04b;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans Thai',sans-serif;
+  font-size:14px;line-height:1.55;padding:20px clamp(12px,3vw,36px) 60px}
+.mono{font-family:'IBM Plex Mono',monospace}
+header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+h1{font-size:20px;font-weight:600}
+h1 .dot{color:var(--accent)}
+.asof{color:var(--ink3);font-size:12.5px}
+.badge-demo{font-size:11px;color:#000;background:var(--gold);border-radius:4px;padding:1px 8px;font-weight:600}
+h2{font-size:14px;font-weight:600;color:var(--accent);margin:26px 0 10px;
+  display:flex;align-items:center;gap:8px}
+h2 .sub{color:var(--ink3);font-weight:400;font-size:12px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+.grid-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.setup{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
+.setup .head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.setup .name{font-weight:600;font-size:13.5px}
+.pill{font-size:11px;font-weight:600;border-radius:20px;padding:2px 10px;white-space:nowrap}
+.chk{display:flex;gap:7px;font-size:12px;color:var(--ink2);line-height:1.5;align-items:flex-start}
+.chk .ic{width:13px;flex:none;margin-top:1px;font-weight:700}
+.chk.off{color:var(--ink3)}
+.controls{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+button.tg{background:var(--card2);border:1px solid var(--border);color:var(--ink3);
+  border-radius:8px;padding:4px 12px;font-size:12px;cursor:pointer;font-family:inherit}
+button.tg.on{color:var(--ink);border-color:var(--accent)}
+button.tg:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--ink2);margin:10px 0 6px}
+#legend .chip{display:flex;align-items:center;gap:5px;cursor:pointer;padding:1px 2px;border-radius:4px}
+#legend .chip.hide{opacity:.32}
+#legend .sw{width:9px;height:9px;border-radius:50%}
+.chartbox{position:relative;height:460px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{color:var(--ink3);font-weight:500;text-align:right;padding:7px 6px;white-space:nowrap;
+  cursor:pointer;user-select:none}
+th.l,td.l{text-align:left}
+td{padding:7px 6px;text-align:right;border-top:1px solid var(--border);white-space:nowrap}
+tr.theme{cursor:pointer}
+tr.theme:hover td{background:var(--card2)}
+tr.member td{background:#0e1319;color:var(--ink2);font-size:12px}
+tr.member td:first-child{padding-left:26px}
+.pos{color:var(--lead)} .neg{color:var(--lag)} .mut{color:var(--ink3)}
+.q-Leading{background:rgba(34,197,94,.14);color:var(--lead)}
+.q-Improving{background:rgba(59,130,246,.14);color:var(--imp)}
+.q-Weakening{background:rgba(245,158,11,.15);color:var(--weak)}
+.q-Lagging{background:rgba(239,68,68,.14);color:var(--lag)}
+.s-BUY{background:rgba(34,197,94,.16);color:var(--lead)}
+.s-SELL{background:rgba(239,68,68,.16);color:var(--lag)}
+.s-WATCH{background:rgba(59,130,246,.16);color:var(--imp)}
+.s-REDUCE{background:rgba(245,158,11,.17);color:var(--weak)}
+.s-HOLD{background:rgba(154,164,178,.14);color:var(--ink2)}
+.t1{color:var(--lead)} .t0{color:var(--lag)} .t2{color:var(--imp)}
+.pb{font-size:11px;border-radius:20px;padding:2px 9px;background:rgba(154,164,178,.12)}
+footer{margin-top:34px;color:var(--ink3);font-size:11.5px;border-top:1px solid var(--border);padding-top:14px}
+.err{color:var(--weak);padding:18px;text-align:center}
+@media (max-width:720px){ .chartbox{height:380px} body{padding:14px 10px 50px} }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Technical Score Rotation <span class="dot">·</span> RRG</h1>
+  <span class="asof" id="asof"></span>
+  <span id="demoBadge" hidden class="badge-demo">DEMO DATA</span>
+</header>
+
+<div id="app"><div class="err">กำลังโหลดข้อมูล…</div></div>
+
+<template id="tpl">
+  <h2>Setup เด่นวันนี้ <span class="sub">สัญญาณ ≥ 4/10 เรียงตามคะแนน</span></h2>
+  <div class="grid-cards" id="cards"></div>
+
+  <h2 style="justify-content:space-between">
+    <span>Score Rotation Graph</span>
+    <span class="controls">
+      <button class="tg on" id="b5">Δ 5 วัน</button>
+      <button class="tg" id="b10">Δ 10 วัน</button>
+      <button class="tg" id="bsig">เฉพาะที่มี signal</button>
+    </span>
+  </h2>
+  <div class="card">
+    <div id="legend"></div>
+    <div class="chartbox"><canvas id="rrg"></canvas></div>
+    <div style="color:var(--ink3);font-size:12px;margin-top:6px">
+      แกน X = คะแนน technical รวม (0–100, เส้นแบ่ง 50) · แกน Y = Δ คะแนน ·
+      หาง 8 วันล่าสุด จุดใหญ่ = วันนี้ · คลิกชื่อธีมด้านบนเพื่อซ่อน/แสดง
+    </div>
+  </div>
+
+  <h2>คะแนนราย indicator + สัญญาณ <span class="sub">คลิกแถวเพื่อดูหุ้นข้างในธีม · คลิกหัวคอลัมน์เพื่อเรียง</span></h2>
+  <div class="card" style="overflow-x:auto">
+    <table id="t1"><thead><tr>
+      <th class="l" data-k="name">ธีม</th><th data-k="cipher">Cipher B</th>
+      <th data-k="hull">Hull 9/20</th><th data-k="ma50">MA50</th><th data-k="ma200">MA200</th>
+      <th data-k="adx">ADX</th><th data-k="score">คะแนน</th><th data-k="d5">Δ5D</th>
+      <th class="l" data-k="quad">สถานะ</th><th class="l" data-k="sig">Signal</th>
+    </tr></thead><tbody></tbody></table>
+  </div>
+
+  <h2>Price action และแท่งเทียน <span class="sub">ราคาอ้างอิง = ETF หลักของธีม · จุดแดงบน sparkline = จุดต่ำสุด 10 วัน</span></h2>
+  <div class="card" style="overflow-x:auto">
+    <table id="t2"><thead><tr>
+      <th class="l">ธีม</th><th class="l">10 วัน</th><th>1D%</th><th>3D%</th>
+      <th>5D%</th><th>10D%</th><th class="l">โครงสร้าง</th><th class="l">Pattern</th>
+    </tr></thead><tbody></tbody></table>
+  </div>
+
+  <footer>
+    ระบบนี้จัดระเบียบสัญญาณ technical เพื่อประกอบการตัดสินใจเท่านั้น ไม่ใช่คำแนะนำการลงทุน ·
+    คะแนน: Cipher B 35% / Hull 25% / MA50 20% / MA200 20% + ADX เป็นตัวคูณ ·
+    Signal ≥7 = BUY/SELL, 4–6 = WATCH/REDUCE · อัปเดตอัตโนมัติหลังตลาด US ปิด
+  </footer>
+</template>
+
+<script>
+const QC={Leading:'#22c55e',Improving:'#3b82f6',Weakening:'#f59e0b',Lagging:'#ef4444'};
+const QBG={Leading:'rgba(34,197,94,.055)',Improving:'rgba(59,130,246,.055)',
+           Weakening:'rgba(245,158,11,.06)',Lagging:'rgba(239,68,68,.05)'};
+let D=null, lag=5, sigOnly=false, chart=null, hidden=new Set(), sortK='score', sortAsc=false;
+
+const app=document.getElementById('app');
+fetch('data.json?v='+Date.now()).then(r=>{if(!r.ok)throw 0;return r.json()})
+ .then(j=>{D=j;init();})
+ .catch(()=>{app.innerHTML='<div class="err">โหลด data.json ไม่ได้ — รัน scripts/run_daily.py ก่อน แล้วเปิดผ่าน http server (เช่น python -m http.server ในโฟลเดอร์ docs)</div>';});
+
+function tail(t){const h=t.score_hist,p=[];for(let i=h.length-8;i<h.length;i++){p.push({x:h[i],y:+(h[i]-h[i-lag]).toFixed(1)});}return p;}
+const quad=(x,y)=>x>=50?(y>=0?'Leading':'Weakening'):(y>=0?'Improving':'Lagging');
+const rowOf=t=>{const tl=tail(t),l=tl[tl.length-1];return{t,x:l.x,y:l.y,q:quad(l.x,l.y)};};
+const fs=v=>v>0?`<span class="pos">+${v}</span>`:v<0?`<span class="neg">${v}</span>`:'<span class="mut">0</span>';
+const fp=v=>{const c=v>0.05?'pos':v<-0.05?'neg':'mut';return`<span class="${c}">${v>0?'+':''}${v.toFixed(1)}</span>`;};
+
+function init(){
+  document.getElementById('asof').textContent='ข้อมูล ณ '+D.as_of;
+  if(D.demo)document.getElementById('demoBadge').hidden=false;
+  app.innerHTML='';app.appendChild(document.getElementById('tpl').content.cloneNode(true));
+  document.getElementById('b5').onclick=()=>{lag=5;tgl();render();};
+  document.getElementById('b10').onclick=()=>{lag=10;tgl();render();};
+  document.getElementById('bsig').onclick=e=>{sigOnly=!sigOnly;e.target.classList.toggle('on',sigOnly);render();};
+  document.querySelectorAll('#t1 th').forEach(th=>th.onclick=()=>{const k=th.dataset.k;
+    if(sortK===k)sortAsc=!sortAsc;else{sortK=k;sortAsc=(k==='name');}renderTables();});
+  render();
+}
+function tgl(){document.getElementById('b5').classList.toggle('on',lag===5);
+  document.getElementById('b10').classList.toggle('on',lag===10);}
+
+function themes(){return sigOnly?D.themes.filter(t=>t.signal&&t.signal.grade!=='HOLD'):D.themes;}
+
+function render(){renderCards();renderChart();renderTables();}
+
+function renderCards(){
+  const el=document.getElementById('cards');el.innerHTML='';
+  const list=D.themes.filter(t=>t.signal&&t.signal.score>=4)
+    .sort((a,b)=>b.signal.score-a.signal.score).slice(0,4);
+  if(!list.length){el.innerHTML='<div class="setup mut">วันนี้ไม่มี setup ที่เข้าเกณฑ์ ≥4/10 — ไม่มีอะไรให้ทำก็คือสถานะที่ถูกต้อง</div>';return;}
+  list.forEach(t=>{const g=t.signal;
+    el.insertAdjacentHTML('beforeend',`<div class="setup">
+      <div class="head"><span class="name">${t.name}</span>
+      <span class="pill s-${g.grade}">${g.grade} ${g.score}/10</span></div>
+      ${g.checklist.map(([txt,ok])=>`<div class="chk ${ok?'':'off'}">
+        <span class="ic" style="color:${ok?'var(--lead)':'var(--lag)'}">${ok?'✓':'✗'}</span><span>${txt}</span></div>`).join('')}
+    </div>`);});
+}
+
+const qplug={id:'q',beforeDatasetsDraw(c){
+  const{ctx,chartArea:a,scales:{x,y}}=c,mx=x.getPixelForValue(50),my=y.getPixelForValue(0);
+  ctx.save();
+  ctx.fillStyle=QBG.Improving;ctx.fillRect(a.left,a.top,mx-a.left,my-a.top);
+  ctx.fillStyle=QBG.Leading;ctx.fillRect(mx,a.top,a.right-mx,my-a.top);
+  ctx.fillStyle=QBG.Lagging;ctx.fillRect(a.left,my,mx-a.left,a.bottom-my);
+  ctx.fillStyle=QBG.Weakening;ctx.fillRect(mx,my,a.right-mx,a.bottom-my);
+  ctx.strokeStyle='#2a3340';ctx.beginPath();
+  ctx.moveTo(mx,a.top);ctx.lineTo(mx,a.bottom);ctx.moveTo(a.left,my);ctx.lineTo(a.right,my);ctx.stroke();
+  ctx.font='11px IBM Plex Mono,monospace';
+  ctx.fillStyle=QC.Improving;ctx.fillText('IMPROVING',a.left+8,a.top+15);
+  ctx.textAlign='right';ctx.fillStyle=QC.Leading;ctx.fillText('LEADING',a.right-8,a.top+15);
+  ctx.fillStyle=QC.Weakening;ctx.fillText('WEAKENING',a.right-8,a.bottom-8);
+  ctx.textAlign='left';ctx.fillStyle=QC.Lagging;ctx.fillText('LAGGING',a.left+8,a.bottom-8);
+  ctx.restore();}};
+
+function renderChart(){
+  const rows=themes().map(rowOf);
+  const ds=rows.map(r=>({label:r.t.name,data:tail(r.t),showLine:true,
+    borderColor:QC[r.q],backgroundColor:QC[r.q],borderWidth:1.5,tension:.35,
+    pointRadius:tail(r.t).map((_,i,a)=>i===a.length-1?6:2.5),
+    hidden:hidden.has(r.t.name)}));
+  const ymax=Math.max(14,...rows.map(r=>Math.abs(r.y)+3));
+  if(chart){chart.data.datasets=ds;chart.options.scales.y.min=-ymax;chart.options.scales.y.max=ymax;chart.update();}
+  else chart=new Chart(document.getElementById('rrg'),{type:'scatter',data:{datasets:ds},
+    options:{responsive:true,maintainAspectRatio:false,
+      scales:{x:{min:0,max:100,ticks:{color:'#6b7684',stepSize:25},grid:{color:'#1b222c'},
+              title:{display:true,text:'คะแนนรวม technical',color:'#9aa4b2'}},
+             y:{min:-ymax,max:ymax,ticks:{color:'#6b7684'},grid:{color:'#1b222c'},
+              title:{display:true,text:'Δ คะแนน ('+lag+' วัน)',color:'#9aa4b2'}}},
+      plugins:{legend:{display:false},tooltip:{
+        backgroundColor:'#161c25',borderColor:'#232b36',borderWidth:1,
+        callbacks:{label:c=>`${c.dataset.label} · คะแนน ${Math.round(c.raw.x)} · Δ ${c.raw.y>=0?'+':''}${c.raw.y}`}}},
+      interaction:{mode:'nearest',intersect:false}},plugins:[qplug]});
+  chart.options.scales.y.title.text='Δ คะแนน ('+lag+' วัน)';chart.update();
+  const lg=document.getElementById('legend');lg.innerHTML='';
+  rows.forEach(r=>{const c=document.createElement('span');
+    c.className='chip'+(hidden.has(r.t.name)?' hide':'');
+    c.innerHTML=`<span class="sw" style="background:${QC[r.q]}"></span>${r.t.name}`;
+    c.onclick=()=>{hidden.has(r.t.name)?hidden.delete(r.t.name):hidden.add(r.t.name);renderChart();};
+    lg.appendChild(c);});
+}
+
+function sigPill(g){return g?`<span class="pill s-${g.grade}">${g.grade}${g.score?' '+g.score+'/10':''}</span>`:'<span class="mut">–</span>';}
+
+function renderTables(){
+  const rows=themes().map(rowOf);
+  const key=r=>({name:r.t.name,cipher:r.t.sub.cipher,hull:r.t.sub.hull,ma50:r.t.sub.ma50,
+    ma200:r.t.sub.ma200,adx:r.t.adx_mult,score:r.x,d5:r.y,quad:r.q,
+    sig:r.t.signal?r.t.signal.score:-1})[sortK];
+  rows.sort((a,b)=>{const ka=key(a),kb=key(b);
+    return(ka<kb?-1:ka>kb?1:0)*(sortAsc?1:-1);});
+  const t1=document.querySelector('#t1 tbody');t1.innerHTML='';
+  rows.forEach((r,i)=>{const t=r.t;
+    t1.insertAdjacentHTML('beforeend',`<tr class="theme" data-i="${i}">
+      <td class="l" style="font-weight:600">${t.name} <span class="mut" style="font-weight:400">▸</span></td>
+      <td>${fs(t.sub.cipher)}</td><td>${fs(t.sub.hull)}</td><td>${fs(t.sub.ma50)}</td><td>${fs(t.sub.ma200)}</td>
+      <td class="mono ${t.adx_mult>=1.2?'pos':t.adx_mult<=0.7?'mut':''}">×${t.adx_mult.toFixed(2)}</td>
+      <td class="mono" style="font-weight:600">${Math.round(r.x)}</td>
+      <td class="mono ${r.y>=0?'pos':'neg'}">${r.y>=0?'+':''}${Math.round(r.y)}</td>
+      <td class="l"><span class="pill q-${r.q}">${r.q}</span></td>
+      <td class="l">${sigPill(t.signal)}</td></tr>`);
+    t.symbols.forEach(s=>{t1.insertAdjacentHTML('beforeend',`<tr class="member" data-p="${i}" hidden>
+      <td class="l mono">${s.sym}</td><td colspan="4" class="l mut">${s.structure.label}${s.pattern?' · '+s.pattern.label:''}</td>
+      <td></td><td class="mono">${Math.round(s.score)}</td>
+      <td class="mono ${s.delta5>=0?'pos':'neg'}">${s.delta5>=0?'+':''}${Math.round(s.delta5)}</td>
+      <td class="l"><span class="pill q-${s.quadrant}">${s.quadrant}</span></td>
+      <td class="l">${sigPill(s.signal)}</td></tr>`);});
+  });
+  t1.querySelectorAll('tr.theme').forEach(tr=>tr.onclick=()=>{
+    t1.querySelectorAll(`tr.member[data-p="${tr.dataset.i}"]`).forEach(m=>m.hidden=!m.hidden);});
+
+  const t2=document.querySelector('#t2 tbody');t2.innerHTML='';
+  rows.forEach(r=>{const t=r.t,st=t.structure,pt=t.pattern;
+    t2.insertAdjacentHTML('beforeend',`<tr>
+      <td class="l" style="font-weight:600">${t.name} <span class="mut mono" style="font-weight:400;font-size:11px">${t.etf}</span></td>
+      <td class="l">${spark(t.px_hist)}</td>
+      <td>${fp(t.chg.d1)}</td><td>${fp(t.chg.d3)}</td><td>${fp(t.chg.d5)}</td><td>${fp(t.chg.d10)}</td>
+      <td class="l"><span class="pb t${st.tone}">${st.label}</span></td>
+      <td class="l">${pt?`<span class="pb t${pt.tone}">🕯 ${pt.label}</span>`:'<span class="mut">–</span>'}</td></tr>`);});
+}
+
+function spark(px){
+  const w=84,h=24,mn=Math.min(...px),mx=Math.max(...px),rg=(mx-mn)||1;
+  const pt=px.map((v,i)=>`${(i/(px.length-1)*w).toFixed(1)},${(h-2-(v-mn)/rg*(h-4)).toFixed(1)}`).join(' ');
+  const mi=px.indexOf(mn),up=px[px.length-1]>=px[0],c=up?'#22c55e':'#ef4444';
+  const lx=w,ly=(h-2-(px[px.length-1]-mn)/rg*(h-4)).toFixed(1);
+  return`<svg width="${w}" height="${h}"><polyline points="${pt}" fill="none" stroke="${c}" stroke-width="1.5"/>
+    <circle cx="${(mi/(px.length-1)*w).toFixed(1)}" cy="${h-2}" r="2.5" fill="#ef4444"/>
+    <circle cx="${lx}" cy="${ly}" r="2.5" fill="${c}"/></svg>`;
+}
+</script>
+</body>
+</html>
