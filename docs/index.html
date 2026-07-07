@@ -66,6 +66,14 @@ tr.member td:first-child{padding-left:26px}
 .s-HOLD{background:rgba(154,164,178,.14);color:var(--ink2)}
 .t1{color:var(--lead)} .t0{color:var(--lag)} .t2{color:var(--imp)}
 .pb{font-size:12px;border-radius:20px;padding:2px 9px;background:rgba(154,164,178,.12)}
+details.guide{margin:10px 0 0;border:1px solid var(--border);border-radius:10px;background:var(--card2)}
+details.guide summary{cursor:pointer;padding:9px 14px;font-size:13.5px;color:var(--ink2);user-select:none;list-style:none;display:flex;align-items:center;gap:8px}
+details.guide summary::before{content:'▸';color:var(--accent);transition:transform .15s}
+details.guide[open] summary::before{transform:rotate(90deg)}
+details.guide summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.guide-body{padding:4px 16px 14px;font-size:13.5px;color:var(--ink2);line-height:1.75}
+.guide-body b{color:var(--ink);font-weight:600}
+.guide-body .qd{display:inline-block;width:9px;height:9px;border-radius:50%;margin:0 3px 0 6px}
 footer{margin-top:34px;color:var(--ink3);font-size:12.5px;border-top:1px solid var(--border);padding-top:14px}
 .err{color:var(--weak);padding:18px;text-align:center}
 @media (max-width:720px){ .chartbox{height:380px} body{padding:14px 10px 50px} }
@@ -102,6 +110,26 @@ footer{margin-top:34px;color:var(--ink3);font-size:12.5px;border-top:1px solid v
       แกน X = คะแนน technical รวม (0–100, เส้นแบ่ง 50) · แกน Y = Δ คะแนน ·
       หาง 8 วันล่าสุด จุดใหญ่ = วันนี้ · คลิกชื่อธีมด้านบนเพื่อซ่อน/แสดง
     </div>
+    <details class="guide">
+      <summary>วิธีอ่านกราฟและสัญญาณ (คลิกเพื่อกาง)</summary>
+      <div class="guide-body">
+        <b>แต่ละจุด = 1 วัน</b> — แกน X คือ<b>ระดับ</b>คะแนน technical รวมของวันนั้น (0–100)
+        · แกน Y คือ<b>การเปลี่ยนแปลง</b>ของคะแนน เทียบย้อนหลังตามปุ่ม Δ ที่เลือก
+        · หาง 8 จุดไล่จากจางสุด (8 วันก่อน) → จุดใหญ่ทึบ (วันนี้)<br>
+        <b>Quadrant:</b><span class="qd" style="background:var(--lead)"></span><b>Leading</b> คะแนนสูงและกำลังดีขึ้น — ถือต่อ
+        <span class="qd" style="background:var(--weak)"></span><b>Weakening</b> คะแนนยังสูงแต่แรงส่งหมด — ทยอยลด ห้ามเพิ่ม
+        <span class="qd" style="background:var(--lag)"></span><b>Lagging</b> อ่อนและยังแย่ลง — รอก่อน
+        <span class="qd" style="background:var(--imp)"></span><b>Improving</b> ยังอ่อนแต่กำลังฟื้น — โซนหาจุดเข้า risk/reward ดีสุด<br>
+        <b>ทริคอ่านหาง:</b> Y คืออนุพันธ์ของ X — จุดเหนือศูนย์ = เส้นกำลังวิ่งขวา, ใต้ศูนย์ = วิ่งซ้าย
+        เส้นจึงมักหมุนตามเข็มนาฬิกา: Improving → Leading → Weakening → Lagging
+        · จุดอยู่ Leading แต่หางโค้งหัวลงใกล้ศูนย์ = เริ่มเสียโมเมนตัมแม้คะแนนยังสูง<br>
+        <b>ปุ่ม Δ:</b> Δ1 เช็กการพลิกทิศวันนี้ (แกว่งแรง เป็น zigzag ปกติ) · Δ3 โมเมนตัมสั้นแบบลด noise
+        · <b>Δ5 มุมมองหลักสำหรับ rotation</b> · Δ10 ยืนยันเทรนด์ใหญ่<br>
+        <b>Signal:</b> BUY/SELL = checklist ≥7/10 · WATCH/REDUCE = 4–6 (ดูรายละเอียดในการ์ดบนสุดและตาราง)
+        · HOLD = อยู่ Leading อยู่แล้ว ไม่ใช่จุดเข้าใหม่ · "–" = ไม่มีอะไรให้ทำ ซึ่งเป็นสถานะที่ถูกต้อง
+      </div>
+    </details>
+
   </div>
 
   <h2>คะแนนราย indicator + สัญญาณ <span class="sub">คลิกแถวเพื่อดูหุ้นข้างในธีม · คลิกหัวคอลัมน์เพื่อเรียง</span></h2>
@@ -196,7 +224,8 @@ function renderChart(){
   const rows=themes().map(rowOf);
   const fade=(hex,a)=>hex+Math.round(a*255).toString(16).padStart(2,'0');
   const ds=rows.map(r=>{const pts=tail(r.t),n=pts.length,col=QC[r.q];
-    return{label:r.t.name,data:pts,showLine:true,borderColor:col,backgroundColor:col,
+    const dts=(r.t.score_dates||[]).slice(-n);
+    return{label:r.t.name,data:pts,dts,showLine:true,borderColor:col,backgroundColor:col,
     borderWidth:1.5,tension:.35,
     segment:{borderColor:s=>fade(col,.12+.68*(s.p1DataIndex/(n-1)))},
     pointRadius:pts.map((_,i)=>i===n-1?6.5:2.8),
@@ -213,7 +242,11 @@ function renderChart(){
               title:{display:true,text:'Δ คะแนน ('+lag+' วัน)',color:'#9aa4b2',font:{size:14}}}},
       plugins:{legend:{display:false},tooltip:{
         backgroundColor:'#161c25',borderColor:'#232b36',borderWidth:1,titleFont:{size:14},bodyFont:{size:14},
-        callbacks:{label:c=>`${c.dataset.label} · คะแนน ${Math.round(c.raw.x)} · Δ ${c.raw.y>=0?'+':''}${c.raw.y}`}}},
+        callbacks:{
+        title:c=>{const t=c[0];const d=t.dataset.dts&&t.dataset.dts[t.dataIndex];
+          const n=t.dataset.data.length,ago=n-1-t.dataIndex;
+          return (d?d+' · ':'')+(ago===0?'วันนี้':ago+' วันก่อน');},
+        label:c=>`${c.dataset.label} · คะแนน ${Math.round(c.raw.x)} · Δ ${c.raw.y>=0?'+':''}${c.raw.y}`}}},
       interaction:{mode:'nearest',intersect:false}},plugins:[qplug]});
   chart.options.scales.y.title.text='Δ คะแนน ('+lag+' วัน)';chart.update();
   const lg=document.getElementById('legend');lg.innerHTML='';
@@ -275,4 +308,3 @@ function spark(px){
 </script>
 </body>
 </html>
-
