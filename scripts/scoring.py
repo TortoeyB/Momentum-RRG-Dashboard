@@ -19,7 +19,9 @@ Buy checklist (0–10):
   +2 bullish divergence บน WT (ภายใน 5 วัน)
   +1 money flow เขียว
   (gold buy → หมวด Cipher B ได้เต็ม 5 ทันที)
-  >=7 = BUY, 4–6 = WATCH   |   ฝั่ง SELL ใช้เงื่อนไขกลับด้าน
+  >=7 = BUY
+  5–6 + โครงสร้างยืนยัน (Higher low/high) + money flow ไม่แดง = ACCUM (ทยอยซื้อ)
+  4–6 อื่นๆ = WATCH   |   ฝั่ง SELL ใช้เงื่อนไขกลับด้าน (SELL / REDUCE)
 """
 
 import numpy as np
@@ -205,6 +207,9 @@ def signal(sc: pd.DataFrame, quad_now: str, quad_prev: str,
         return pack("BUY", min(buy_score, 10), b)
     if sell_score >= 7:
         return pack("SELL", min(sell_score, 10), s)
+    if (buy_score >= 5 and buy_score >= sell_score
+            and structure["code"] in ("higher_low", "higher_high") and mf_green):
+        return pack("ACCUM", buy_score, b)
     if buy_score >= 4 and buy_score >= sell_score:
         return pack("WATCH", buy_score, b)
     if sell_score >= 4:
