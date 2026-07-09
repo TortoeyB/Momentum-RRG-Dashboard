@@ -52,6 +52,8 @@ table{width:100%;border-collapse:collapse;font-size:14px}
 th{color:var(--ink3);font-weight:500;text-align:right;padding:7px 6px;white-space:nowrap;
   cursor:pointer;user-select:none}
 th.l,td.l{text-align:left}
+td .symwrap{display:flex;gap:7px;align-items:baseline;min-width:0}
+td .symwrap .mono{flex:none}
 td{padding:7px 6px;text-align:right;border-top:1px solid var(--border);white-space:nowrap}
 tr.theme{cursor:pointer}
 tr.theme:hover td{background:var(--card2)}
@@ -146,7 +148,7 @@ footer{margin-top:34px;color:var(--ink3);font-size:12.5px;border-top:1px solid v
   <h2>คะแนนราย indicator + สัญญาณ <span class="sub">คลิกแถวเพื่อดูหุ้นข้างในธีม · คลิกหัวคอลัมน์เพื่อเรียง</span></h2>
   <div class="card" style="overflow-x:auto">
     <table id="t1"><thead><tr>
-      <th class="l" data-k="name">ธีม</th><th data-k="cipher" data-tip="<b>Cipher B (น้ำหนัก 35%)</b> คะแนน -2 ถึง +2 จากสัญญาณใน VMC Cipher B: WaveTrend ตัดขึ้น/ลงในโซน oversold/overbought (±1.5), divergence (±1), money flow เขียว/แดง (±0.5) · ถ้าเกิด gold buy ได้ +2 ทันที">Cipher B</th>
+      <th class="l" data-k="name" style="width:210px">ธีม</th><th data-k="cipher" data-tip="<b>Cipher B (น้ำหนัก 35%)</b> คะแนน -2 ถึง +2 จากสัญญาณใน VMC Cipher B: WaveTrend ตัดขึ้น/ลงในโซน oversold/overbought (±1.5), divergence (±1), money flow เขียว/แดง (±0.5) · ถ้าเกิด gold buy ได้ +2 ทันที">Cipher B</th>
       <th data-k="hull" data-tip="<b>Hull MA 9/20 (น้ำหนัก 25%)</b> เส้นค่าเฉลี่ยตอบสนองเร็ว: HMA9 อยู่เหนือ/ใต้ HMA20 (±1) + ความชันของ HMA9 (±1) — จับการเปลี่ยนเทรนด์ระยะสั้นได้ไวกว่า MA ปกติ">Hull 9/20</th><th data-k="ma50" data-tip="<b>MA50 (น้ำหนัก 20%)</b> เทรนด์กลาง: ราคาเหนือ/ใต้เส้น (±1) + ความชันเส้น (±1) · ถ้าราคายืดห่างเส้นเกิน 12% โดนหักคะแนนกลับ (กันไล่ราคาตอนยืดเกิน)">MA50</th><th data-k="ma200" data-tip="<b>MA200 (น้ำหนัก 20%)</b> เทรนด์ใหญ่: ราคาเหนือ/ใต้เส้น (±1) + ความชันเส้น (±1) — ตัวถ่วงไม่ให้สัญญาณสั้นพาออกนอกเทรนด์หลัก">MA200</th>
       <th data-k="adx" data-tip="<b>ADX (14,14) — ตัวคูณความมั่นใจ</b> ไม่ใช่คะแนนบวกลบ แต่คูณส่วนเบี่ยงจาก 50: ADX≥35 เทรนด์แรง ×1.25 · 20–35 ปกติ ×1.00 · &lt;20 ตลาด sideways ×0.60 (ลดความเชื่อทุกสัญญาณ)">ADX</th><th data-k="score" data-tip="<b>คะแนนรวม 0–100</b> รวมถ่วงน้ำหนัก Cipher 35 / Hull 25 / MA50 20 / MA200 20 แล้วคูณ ADX · 50 = เส้นแบ่งกลาง (แกน X ของกราฟ) · &gt;50 สัญญาณฝั่งบวกคุม">คะแนน</th><th data-k="d5" data-tip="<b>Δ5D — score momentum</b> คะแนนวันนี้เทียบ 5 วันก่อน (แกน Y ของกราฟ) · บวก = สัญญาณกำลังดีขึ้น ลบ = กำลังเสื่อม — ตัวนี้คือหัวใจของการหมุน quadrant">Δ5D</th>
       <th class="l" data-k="quad" data-tip="<b>Quadrant</b> Leading = สูง+ดีขึ้น ถือต่อ · Weakening = สูงแต่แผ่ว ทยอยลด · Lagging = อ่อน+แย่ลง รอ · Improving = อ่อนแต่ฟื้น โซนหาจุดเข้า">สถานะ</th><th class="l" data-k="sig" data-tip="<b>Signal checklist 0–10</b> BUY/SELL ≥7 · ACCUM 5–6 + โครงสร้างยืนยัน + MF ไม่แดง (เริ่มไม้แรก) · WATCH/REDUCE 4–6 · HOLD = Leading อยู่แล้ว ไม่ใช่จุดเข้าใหม่ · – = ไม่มีอะไรให้ทำ">Signal</th>
@@ -156,7 +158,7 @@ footer{margin-top:34px;color:var(--ink3);font-size:12.5px;border-top:1px solid v
   <h2>Price action และแท่งเทียน <span class="sub">ราคาอ้างอิง = ETF หลักของธีม · จุดแดงบน sparkline = จุดต่ำสุด 10 วัน</span></h2>
   <div class="card" style="overflow-x:auto">
     <table id="t2"><thead><tr>
-      <th class="l" data-k="name">ธีม</th><th class="l" data-tip="<b>Sparkline ราคา 10 วัน</b> ของ ETF อ้างอิงธีม · จุดแดง = จุดต่ำสุดของช่วง (จุดแดงอยู่ท้ายเส้น = วันนี้คือ low ใหม่) · จุดปลาย = วันนี้">10 วัน</th><th data-k="d1">1D%</th><th data-k="d3">3D%</th>
+      <th class="l" data-k="name" style="width:210px">ธีม</th><th class="l" data-tip="<b>Sparkline ราคา 10 วัน</b> ของ ETF อ้างอิงธีม · จุดแดง = จุดต่ำสุดของช่วง (จุดแดงอยู่ท้ายเส้น = วันนี้คือ low ใหม่) · จุดปลาย = วันนี้">10 วัน</th><th data-k="d1">1D%</th><th data-k="d3">3D%</th>
       <th data-k="d5">5D%</th><th data-k="d10">10D%</th><th class="l" data-k="struct" data-tip="<b>โครงสร้างราคา 10 วัน</b> New 10D low / Lower low = ยังทำ low (แดง) · เด้งจาก low = ฟื้นแต่ยังไม่ยืนยัน (น้ำเงิน) · Higher low / Higher high = โครงสร้างกลับตัวแล้ว (เขียว) — เงื่อนไขบังคับของ ACCUM/BUY">โครงสร้าง</th><th class="l" data-k="pat" data-tip="<b>Candlestick กลับตัว</b> ตรวจ 3 วันล่าสุด: hammer, engulfing, morning/evening star, doji · จะติดป้าย @MA เมื่อเกิดใกล้ MA50/200 (±2.5%) หรือ + divergence เมื่อเกิดหลัง divergence — ตำแหน่งสำคัญกว่าตัว pattern">Pattern</th>
     </tr></thead><tbody></tbody></table>
   </div>
@@ -317,9 +319,13 @@ function renderTables(){
       <td class="mono ${r.y>=0?'pos':'neg'}">${r.y>=0?'+':''}${Math.round(r.y)}</td>
       <td class="l"><span class="pill q-${r.q}">${r.q}</span></td>
       <td class="l">${sigPill(t.signal)}</td></tr>`);
-    t.symbols.forEach(s=>{t1.insertAdjacentHTML('beforeend',`<tr class="member" data-p="${i}" hidden>
-      <td class="l mono">${s.sym}</td><td colspan="4" class="l mut ellip">${s.name?`<span class="nm">${s.name}</span> · `:''}${s.structure.label}${s.pattern?' · '+s.pattern.label:''}</td>
-      <td></td><td class="mono">${Math.round(s.score)}</td>
+    t.symbols.forEach(s=>{const sb=s.sub||{};const tip='<b>'+s.sym+'</b>'+(s.name?' — '+s.name:'')+'<br>'+s.structure.label+(s.pattern?' · '+s.pattern.label:'');
+      t1.insertAdjacentHTML('beforeend',`<tr class="member" data-p="${i}" hidden>
+      <td class="l" data-tip="${tip.replace(/"/g,'&quot;')}"><div class="symwrap ellip"><span class="mono">${s.sym}</span>${s.name?`<span class="nm ellip">${s.name}</span>`:''}</div></td>
+      <td>${sb.cipher!==undefined?fs(sb.cipher):''}</td><td>${sb.hull!==undefined?fs(sb.hull):''}</td>
+      <td>${sb.ma50!==undefined?fs(sb.ma50):''}</td><td>${sb.ma200!==undefined?fs(sb.ma200):''}</td>
+      <td class="mono ${s.adx_mult>=1.2?'pos':s.adx_mult<=0.7?'mut':''}">${s.adx_mult!==undefined?'×'+s.adx_mult.toFixed(2):''}</td>
+      <td class="mono">${Math.round(s.score)}</td>
       <td class="mono ${s.delta5>=0?'pos':'neg'}">${s.delta5>=0?'+':''}${Math.round(s.delta5)}</td>
       <td class="l"><span class="pill q-${s.quadrant}">${s.quadrant}</span></td>
       <td class="l">${sigPill(s.signal)}</td></tr>`);});
