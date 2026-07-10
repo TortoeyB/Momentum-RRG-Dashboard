@@ -148,10 +148,14 @@ def main():
         })
 
     as_of = max(df.index[-1] for df in data.values()).strftime("%Y-%m-%d")
-    watchlists_out = [{"name": k,
-                       "symbols": [symbol_payload(x, scores[x], data[x], names.get(x, ""))
-                                   for x in v if x in scores]}
-                      for k, v in wl.items()]
+    watchlists_out = []
+    for k, v in wl.items():
+        payload_syms = [symbol_payload(x, scores[x], data[x], names.get(x, ""))
+                        for x in v if x in scores]
+        if payload_syms:
+            watchlists_out.append({"name": k, "symbols": payload_syms})
+        else:
+            print(f"[warn] ลิสต์ {k}: ไม่มี symbol ที่ดึงข้อมูลได้เลย — ไม่สร้าง tab")
     payload = {"as_of": as_of, "demo": demo, "tail_len": TAIL_LEN,
                "themes": themes_out, "watchlists": watchlists_out}
 
