@@ -486,7 +486,10 @@ async function wlDelete(){
   try{
     st.textContent='กำลังลบ '+nm+' ...';
     let code=await ghDelete(o,r,H,'watchlists/'+encodeURIComponent(nm)+'.txt','watchlist: delete '+nm);
-    if(code===404&&nm==='Watchlist') code=await ghDelete(o,r,H,'watchlist.txt','watchlist: delete legacy');
+    if(nm.toLowerCase()==='watchlist'){
+      const c2=await ghDelete(o,r,H,'watchlist.txt','watchlist: delete legacy');
+      if(code!==200) code=c2;                    // ลบไฟล์เก่าที่ root ควบคู่ด้วยเสมอ
+    }
     if(code!==200){st.textContent='❌ ลบไม่สำเร็จ ('+code+') — เช็กชื่อ/สิทธิ์ token';return;}
     st.textContent='✅ ลบแล้ว · กำลังสั่งรัน workflow ...';
     const d=await fetch(`https://api.github.com/repos/${o}/${r}/actions/workflows/update.yml/dispatches`,
