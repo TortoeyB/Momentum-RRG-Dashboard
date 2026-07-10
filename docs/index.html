@@ -87,6 +87,29 @@ details.guide summary:focus-visible{outline:2px solid var(--accent);outline-offs
   pointer-events:none;opacity:0;transition:opacity .12s;box-shadow:0 6px 18px rgba(0,0,0,.45)}
 #tip b{color:var(--accent)}
 th[data-tip]{text-decoration:underline dotted #3a4656;text-underline-offset:3px;cursor:help}
+
+.tabsbar{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 18px;border-bottom:1px solid var(--border);padding-bottom:10px}
+.tabsbar button{background:transparent;border:1px solid var(--border);color:var(--ink3);border-radius:9px;
+  padding:6px 16px;font-size:14px;cursor:pointer;font-family:inherit;font-weight:500}
+.tabsbar button.on{background:rgba(240,160,75,.13);border-color:var(--accent);color:var(--accent)}
+.grpbar{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}
+.grpbar button{background:var(--card2);border:1px solid var(--border);color:var(--ink3);border-radius:20px;
+  padding:3px 13px;font-size:12.5px;cursor:pointer;font-family:inherit}
+.grpbar button.on{background:rgba(59,130,246,.14);border-color:var(--imp);color:var(--imp)}
+#legend{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:3px 12px;margin:10px 0 6px}
+#legend .chip{display:flex;align-items:center;gap:6px;cursor:pointer;padding:2px 4px;border-radius:5px;
+  font-size:13px;color:var(--ink2);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+#legend .chip:hover{background:var(--card2)}
+#legend .chip.hide{opacity:.3}
+.legendctl{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+button.tg.on{background:rgba(240,160,75,.15);border-color:var(--accent);color:var(--accent);font-weight:600}
+.card{background:#131a24;box-shadow:0 1px 0 rgba(255,255,255,.03) inset}
+td{font-variant-numeric:tabular-nums}
+.dbar{position:relative}
+.dbar .fill{position:absolute;left:0;top:15%;bottom:15%;border-radius:3px;opacity:.16;pointer-events:none}
+.chk .ic{font-weight:600}
+.chk.off .ic{color:var(--ink3)!important}
+.chk.off{opacity:.55}
 footer{margin-top:34px;color:var(--ink3);font-size:12.5px;border-top:1px solid var(--border);padding-top:14px}
 .err{color:var(--weak);padding:18px;text-align:center}
 @media (max-width:720px){ .chartbox{height:380px} body{padding:14px 10px 50px} }
@@ -103,12 +126,16 @@ footer{margin-top:34px;color:var(--ink3);font-size:12.5px;border-top:1px solid v
 <div id="app"><div class="err">กำลังโหลดข้อมูล…</div></div>
 
 <template id="tpl">
-  <h2>Setup เด่นวันนี้ <span class="sub">สัญญาณ ≥ 4/10 เรียงตามคะแนน</span></h2>
+  <div class="tabsbar" id="tabs"></div>
+  <h2 id="setupHead">Setup เด่นวันนี้ <span class="sub">สัญญาณ ≥ 4/10 เรียงตามคะแนน</span></h2>
   <div class="grid-cards" id="cards"></div>
 
   <h2 style="justify-content:space-between">
     <span>Score Rotation Graph</span>
     <span class="controls">
+      <span style="color:var(--ink3);font-size:12.5px">หาง</span>
+      <button class="tg" id="tl3">3</button><button class="tg" id="tl5">5</button><button class="tg on" id="tl8">8</button>
+      <span style="width:8px"></span>
       <button class="tg" id="b1">Δ 1 วัน</button>
       <button class="tg" id="b3">Δ 3 วัน</button>
       <button class="tg on" id="b5">Δ 5 วัน</button>
@@ -117,6 +144,9 @@ footer{margin-top:34px;color:var(--ink3);font-size:12.5px;border-top:1px solid v
     </span>
   </h2>
   <div class="card">
+    <div class="grpbar" id="grpbar"></div>
+    <div class="legendctl"><div style="color:var(--ink3);font-size:12.5px">คลิกชื่อ = ซ่อน/แสดง · ชี้ = ไฮไลต์เส้น (ชี้แถวในตารางก็ได้)</div>
+      <div style="display:flex;gap:6px"><button class="tg" id="selAll">เลือกทั้งหมด</button><button class="tg" id="selNone">ล้างทั้งหมด</button></div></div>
     <div id="legend"></div>
     <div class="chartbox"><canvas id="rrg"></canvas></div>
     <div style="color:var(--ink3);font-size:12px;margin-top:6px">
@@ -177,6 +207,7 @@ footer{margin-top:34px;color:var(--ink3);font-size:12.5px;border-top:1px solid v
             <input type="checkbox" id="wlRemember" checked>จำ token ในเบราว์เซอร์นี้</label>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start">
+          <input id="wlName" placeholder="ชื่อลิสต์ เช่น SPDR" style="width:140px" class="wlin">
           <input type="file" id="wlFile" accept=".txt" style="color:var(--ink3);font-size:12.5px">
           <textarea id="wlText" rows="2" placeholder="หรือ paste เช่น NASDAQ:NVDA, AMEX:SMH, NYSE:UBER"
             style="flex:1;min-width:240px" class="wlin"></textarea>
@@ -199,51 +230,86 @@ footer{margin-top:34px;color:var(--ink3);font-size:12.5px;border-top:1px solid v
 
 <script>
 const QC={Leading:'#22c55e',Improving:'#3b82f6',Weakening:'#f59e0b',Lagging:'#ef4444'};
-const QBG={Leading:'rgba(34,197,94,.055)',Improving:'rgba(59,130,246,.055)',
-           Weakening:'rgba(245,158,11,.06)',Lagging:'rgba(239,68,68,.05)'};
-let D=null, lag=5, sigOnly=false, chart=null, hidden=new Set(), sortK='score', sortAsc=false, sortK2=null, sortAsc2=false;
+const QBG={Leading:'rgba(34,197,94,.055)',Improving:'rgba(59,130,246,.055)',Weakening:'rgba(245,158,11,.06)',Lagging:'rgba(239,68,68,.05)'};
+let D=null,tab='__themes__',lag=5,TAIL=8,sigOnly=false,chart=null,hi=null,
+    hidden=new Set(),grpOff=new Set(),sortK='score',sortAsc=false,sortK2=null,sortAsc2=false;
 
 const app=document.getElementById('app');
 fetch('data.json?v='+Date.now()).then(r=>{if(!r.ok)throw 0;return r.json()})
  .then(j=>{D=j;init();})
- .catch(()=>{app.innerHTML='<div class="err">โหลด data.json ไม่ได้ — รัน scripts/run_daily.py ก่อน แล้วเปิดผ่าน http server (เช่น python -m http.server ในโฟลเดอร์ docs)</div>';});
+ .catch(()=>{app.innerHTML='<div class="err">โหลด data.json ไม่ได้ — รัน scripts/run_daily.py ก่อน แล้วเปิดผ่าน http server</div>';});
 
-function tail(t){const h=t.score_hist,p=[];for(let i=h.length-8;i<h.length;i++){p.push({x:h[i],y:+(h[i]-h[i-lag]).toFixed(1)});}return p;}
+const fade=(hex,a)=>hex+Math.round(a*255).toString(16).padStart(2,'0');
 const quad=(x,y)=>x>=50?(y>=0?'Leading':'Weakening'):(y>=0?'Improving':'Lagging');
+function tail(t){const h=t.score_hist,p=[];for(let i=h.length-TAIL;i<h.length;i++){p.push({x:h[i],y:+(h[i]-h[i-lag]).toFixed(1)});}return p;}
 const rowOf=t=>{const tl=tail(t),l=tl[tl.length-1];return{t,x:l.x,y:l.y,q:quad(l.x,l.y)};};
 const fs=v=>v>0?`<span class="pos">+${v}</span>`:v<0?`<span class="neg">${v}</span>`:'<span class="mut">0</span>';
 const fp=v=>{const c=v>0.05?'pos':v<-0.05?'neg':'mut';return`<span class="${c}">${v>0?'+':''}${v.toFixed(1)}</span>`;};
+
+// ---------- แหล่งข้อมูลตาม tab ----------
+function baseRows(){
+  if(tab==='__themes__') return D.themes;
+  const w=(D.watchlists||[]).find(w=>w.name===tab);
+  return w?w.symbols.map(s=>({name:s.sym,fullname:s.name,group:'',etf:'',symbols:[],
+    score_hist:s.score_hist,score_dates:s.score_dates,sub:s.sub,adx_mult:s.adx_mult,
+    px_hist:s.px_hist,chg:s.chg,structure:s.structure,pattern:s.pattern,signal:s.signal})):[];
+}
+function themes(){
+  let r=baseRows();
+  if(tab==='__themes__'&&grpOff.size) r=r.filter(t=>!grpOff.has(t.group));
+  if(sigOnly) r=r.filter(t=>t.signal&&t.signal.grade!=='HOLD');
+  return r.filter(t=>t.score_hist&&t.score_hist.length>=TAIL+lag&&t.sub&&t.px_hist);
+}
 
 function init(){
   document.getElementById('asof').textContent='ข้อมูล ณ '+D.as_of;
   if(D.demo)document.getElementById('demoBadge').hidden=false;
   app.innerHTML='';app.appendChild(document.getElementById('tpl').content.cloneNode(true));
+  buildTabs();buildGroups();
   [1,3,5,10].forEach(v=>document.getElementById('b'+v).onclick=()=>{lag=v;tgl();render();});
+  [3,5,8].forEach(v=>document.getElementById('tl'+v).onclick=()=>{TAIL=v;tgl();render();});
   document.getElementById('bsig').onclick=e=>{sigOnly=!sigOnly;e.target.classList.toggle('on',sigOnly);render();};
-  wlInit();
+  document.getElementById('selAll').onclick=()=>{hidden.clear();render();};
+  document.getElementById('selNone').onclick=()=>{themes().forEach(t=>hidden.add(t.name));render();};
   document.querySelectorAll('#t1 th').forEach(th=>th.onclick=()=>{const k=th.dataset.k;
-    if(sortK===k)sortAsc=!sortAsc;else{sortK=k;sortAsc=(k==='name');}renderTables();});
+    if(sortK===k)sortAsc=!sortAsc;else{sortK=k;sortAsc=(k==='name');}renderTables(themes().map(rowOf));});
   document.querySelectorAll('#t2 th[data-k]').forEach(th=>th.onclick=()=>{const k=th.dataset.k;
-    if(sortK2===k)sortAsc2=!sortAsc2;else{sortK2=k;sortAsc2=(k==='name');}renderTables();});
-  render();
+    if(sortK2===k)sortAsc2=!sortAsc2;else{sortK2=k;sortAsc2=(k==='name');}renderTables(themes().map(rowOf));});
+  wlInit();tgl();render();
 }
-function tgl(){[1,3,5,10].forEach(v=>document.getElementById('b'+v).classList.toggle('on',lag===v));}
+function tgl(){[1,3,5,10].forEach(v=>document.getElementById('b'+v).classList.toggle('on',lag===v));
+  [3,5,8].forEach(v=>document.getElementById('tl'+v).classList.toggle('on',TAIL===v));}
 
-function themes(){return sigOnly?D.themes.filter(t=>t.signal&&t.signal.grade!=='HOLD'):D.themes;}
+function buildTabs(){
+  const el=document.getElementById('tabs');el.innerHTML='';
+  const mk=(id,label)=>{const b=document.createElement('button');b.textContent=label;
+    b.className=tab===id?'on':'';b.onclick=()=>{tab=id;hi=null;buildTabs();buildGroups();render();};el.appendChild(b);};
+  mk('__themes__','ธีมหลัก');
+  (D.watchlists||[]).forEach(w=>mk(w.name,w.name+' ('+w.symbols.length+')'));
+}
+function buildGroups(){
+  const el=document.getElementById('grpbar');el.innerHTML='';
+  if(tab!=='__themes__'){el.style.display='none';return;}
+  el.style.display='flex';
+  const gs=[...new Set(D.themes.map(t=>t.group))];
+  gs.forEach(g=>{const b=document.createElement('button');b.textContent=g;
+    b.className=grpOff.has(g)?'':'on';
+    b.onclick=()=>{grpOff.has(g)?grpOff.delete(g):grpOff.add(g);buildGroups();render();};el.appendChild(b);});
+}
 
-function render(){renderCards();renderChart();renderTables();}
+function render(){const rows=themes().map(rowOf);renderCards(rows);renderChart(rows);renderTables(rows);}
 
-function renderCards(){
+function renderCards(rows){
   const el=document.getElementById('cards');el.innerHTML='';
-  const list=D.themes.filter(t=>t.signal&&t.signal.score>=4)
-    .sort((a,b)=>b.signal.score-a.signal.score).slice(0,4);
-  if(!list.length){el.innerHTML='<div class="setup mut">วันนี้ไม่มี setup ที่เข้าเกณฑ์ ≥4/10 — ไม่มีอะไรให้ทำก็คือสถานะที่ถูกต้อง</div>';return;}
-  list.forEach(t=>{const g=t.signal;
+  const list=rows.filter(r=>r.t.signal&&r.t.signal.score>=4)
+    .sort((a,b)=>b.t.signal.score-a.t.signal.score).slice(0,4);
+  if(!list.length){el.innerHTML='<div class="setup mut">ไม่มี setup ที่เข้าเกณฑ์ ≥4/10 ใน tab นี้ — ไม่มีอะไรให้ทำก็คือสถานะที่ถูกต้อง</div>';return;}
+  list.forEach(r=>{const t=r.t,g=t.signal;
     el.insertAdjacentHTML('beforeend',`<div class="setup">
-      <div class="head"><span class="name">${t.name}</span>
+      <div class="head"><span class="name">${t.name}${t.fullname?' <span class="mut" style="font-weight:400;font-size:12px">'+t.fullname+'</span>':''}</span>
       <span class="pill s-${g.grade}">${g.grade} ${g.score}/10</span></div>
       ${g.checklist.map(([txt,ok])=>`<div class="chk ${ok?'':'off'}">
-        <span class="ic" style="color:${ok?'var(--lead)':'var(--lag)'}">${ok?'✓':'✗'}</span><span>${txt}</span></div>`).join('')}
+        <span class="ic" style="color:${ok?'var(--lead)':'var(--ink3)'}">${ok?'✓':'–'}</span><span>${txt}</span></div>`).join('')}
     </div>`);});
 }
 
@@ -263,21 +329,28 @@ const qplug={id:'q',beforeDatasetsDraw(c){
   ctx.textAlign='left';ctx.fillStyle=QC.Lagging;ctx.fillText('LAGGING',a.left+8,a.bottom-8);
   ctx.restore();}};
 
-function renderChart(){
-  const rows=themes().map(rowOf);
-  const fade=(hex,a)=>hex+Math.round(a*255).toString(16).padStart(2,'0');
-  const ds=rows.map(r=>{const pts=tail(r.t),n=pts.length,col=QC[r.q];
-    const dts=(r.t.score_dates||[]).slice(-n);
-    return{label:r.t.name,data:pts,dts,showLine:true,borderColor:col,backgroundColor:col,
-    borderWidth:1.5,tension:.35,
-    segment:{borderColor:s=>fade(col,.12+.68*(s.p1DataIndex/(n-1)))},
-    pointRadius:pts.map((_,i)=>i===n-1?6.5:2.8),
-    pointBackgroundColor:pts.map((_,i)=>fade(col,i===n-1?1:.18+.6*(i/(n-1)))),
-    pointBorderColor:pts.map((_,i)=>fade(col,i===n-1?1:.18+.6*(i/(n-1)))),
-    hidden:hidden.has(r.t.name)};});
-  const ymax=Math.max(14,...rows.map(r=>Math.abs(r.y)+3));
-  if(chart){chart.data.datasets=ds;chart.options.scales.y.min=-ymax;chart.options.scales.y.max=ymax;chart.update();}
-  else chart=new Chart(document.getElementById('rrg'),{type:'scatter',data:{datasets:ds},
+function buildDatasets(rows){
+  return rows.map(r=>{const pts=tail(r.t),n=pts.length;
+    const dim=hi&&r.t.name!==hi;
+    const base=dim?'#5b6572':QC[r.q];
+    return{label:r.t.name,data:pts,dts:(r.t.score_dates||[]).slice(-n),showLine:true,
+      borderColor:base,backgroundColor:base,tension:.35,borderWidth:1.5,
+      segment:{borderColor:s=>fade(base,(dim?.3:1)*(.12+.68*(s.p1DataIndex/Math.max(n-1,1)))),
+               borderWidth:s=>dim?0.8:(0.9+1.8*(s.p1DataIndex/Math.max(n-1,1)))},
+      pointRadius:pts.map((_,i)=>i===n-1?(dim?4:6.5):(1.8+1.2*i/Math.max(n-1,1))),
+      pointBackgroundColor:pts.map((_,i)=>fade(base,(dim?.3:1)*(i===n-1?1:.18+.6*(i/Math.max(n-1,1))))),
+      pointBorderColor:pts.map((_,i)=>fade(base,(dim?.3:1)*(i===n-1?1:.18+.6*(i/Math.max(n-1,1))))),
+      hidden:hidden.has(r.t.name)};});
+}
+function highlight(name){if(hi===name)return;hi=name;
+  if(chart){chart.data.datasets=buildDatasets(themes().map(rowOf));chart.update('none');}}
+
+function renderChart(rows){
+  const ds=buildDatasets(rows);
+  const ymax=Math.max(14,...rows.map(r=>Math.abs(r.y)+3),1);
+  if(chart){chart.data.datasets=ds;chart.options.scales.y.min=-ymax;chart.options.scales.y.max=ymax;
+    chart.options.scales.y.title.text='Δ คะแนน ('+lag+' วัน)';chart.update();}
+  else{chart=new Chart(document.getElementById('rrg'),{type:'scatter',data:{datasets:ds},
     options:{responsive:true,maintainAspectRatio:false,
       scales:{x:{min:0,max:100,ticks:{color:'#6b7684',stepSize:25,font:{size:13}},grid:{color:'#1b222c'},
               title:{display:true,text:'คะแนนรวม technical',color:'#9aa4b2',font:{size:14}}},
@@ -286,74 +359,94 @@ function renderChart(){
       plugins:{legend:{display:false},tooltip:{
         backgroundColor:'#161c25',borderColor:'#232b36',borderWidth:1,titleFont:{size:14},bodyFont:{size:14},
         callbacks:{
-        title:c=>{const t=c[0];const d=t.dataset.dts&&t.dataset.dts[t.dataIndex];
-          const n=t.dataset.data.length,ago=n-1-t.dataIndex;
-          return (d?d+' · ':'')+(ago===0?'วันนี้':ago+' วันก่อน');},
-        label:c=>`${c.dataset.label} · คะแนน ${Math.round(c.raw.x)} · Δ ${c.raw.y>=0?'+':''}${c.raw.y}`}}},
-      interaction:{mode:'nearest',intersect:false}},plugins:[qplug]});
-  chart.options.scales.y.title.text='Δ คะแนน ('+lag+' วัน)';chart.update();
+          title:c=>{const t=c[0];const d=t.dataset.dts&&t.dataset.dts[t.dataIndex];
+            const n=t.dataset.data.length,ago=n-1-t.dataIndex;
+            return (d?d+' · ':'')+(ago===0?'วันนี้':ago+' วันก่อน');},
+          label:c=>`${c.dataset.label} · คะแนน ${Math.round(c.raw.x)} · Δ ${c.raw.y>=0?'+':''}${c.raw.y}`}}},
+      interaction:{mode:'nearest',intersect:false}},plugins:[qplug]});}
   const lg=document.getElementById('legend');lg.innerHTML='';
   rows.forEach(r=>{const c=document.createElement('span');
     c.className='chip'+(hidden.has(r.t.name)?' hide':'');
-    c.innerHTML=`<span class="sw" style="background:${QC[r.q]}"></span>${r.t.name}`;
-    c.onclick=()=>{hidden.has(r.t.name)?hidden.delete(r.t.name):hidden.add(r.t.name);renderChart();};
+    c.innerHTML=`<span style="width:9px;height:9px;border-radius:50%;flex:none;background:${QC[r.q]}"></span>${r.t.name}`;
+    c.onclick=()=>{hidden.has(r.t.name)?hidden.delete(r.t.name):hidden.add(r.t.name);render();};
+    c.onmouseenter=()=>highlight(r.t.name);c.onmouseleave=()=>highlight(null);
     lg.appendChild(c);});
 }
 
 function sigPill(g){return g?`<span class="pill s-${g.grade}">${g.grade}${g.score?' '+g.score+'/10':''}</span>`:'<span class="mut">–</span>';}
+const bar=(v,max,color)=>`<span class="fill" style="background:${color};width:${Math.min(Math.abs(v)/max*100,100)}%"></span>`;
 
-function renderTables(){
-  const rows=themes().map(rowOf);
+function renderTables(rows){
   const key=r=>({name:r.t.name,cipher:r.t.sub.cipher,hull:r.t.sub.hull,ma50:r.t.sub.ma50,
     ma200:r.t.sub.ma200,adx:r.t.adx_mult,score:r.x,d5:r.y,quad:r.q,
     sig:r.t.signal?r.t.signal.score:-1})[sortK];
-  rows.sort((a,b)=>{const ka=key(a),kb=key(b);
-    return(ka<kb?-1:ka>kb?1:0)*(sortAsc?1:-1);});
+  rows=[...rows].sort((a,b)=>{const ka=key(a),kb=key(b);return(ka<kb?-1:ka>kb?1:0)*(sortAsc?1:-1);});
   const t1=document.querySelector('#t1 tbody');t1.innerHTML='';
   rows.forEach((r,i)=>{const t=r.t;
-    t1.insertAdjacentHTML('beforeend',`<tr class="theme" data-i="${i}">
-      <td class="l" style="font-weight:600">${t.name} <span class="mut" style="font-weight:400">▸</span></td>
+    t1.insertAdjacentHTML('beforeend',`<tr class="theme" data-i="${i}" data-name="${t.name}">
+      <td class="l" style="font-weight:600"><div class="symwrap ellip"><span>${t.name}</span>${t.fullname?`<span class="nm ellip mut" style="font-weight:400;font-size:12px">${t.fullname}</span>`:''}${t.symbols&&t.symbols.length?' <span class="mut" style="font-weight:400">▸</span>':''}</div></td>
       <td>${fs(t.sub.cipher)}</td><td>${fs(t.sub.hull)}</td><td>${fs(t.sub.ma50)}</td><td>${fs(t.sub.ma200)}</td>
       <td class="mono ${t.adx_mult>=1.2?'pos':t.adx_mult<=0.7?'mut':''}">×${t.adx_mult.toFixed(2)}</td>
-      <td class="mono" style="font-weight:600">${Math.round(r.x)}</td>
-      <td class="mono ${r.y>=0?'pos':'neg'}">${r.y>=0?'+':''}${Math.round(r.y)}</td>
+      <td class="mono dbar" style="font-weight:600">${bar(r.x,100,'#22c55e')}${Math.round(r.x)}</td>
+      <td class="mono dbar ${r.y>=0?'pos':'neg'}">${bar(r.y,20,r.y>=0?'#22c55e':'#ef4444')}${r.y>=0?'+':''}${Math.round(r.y)}</td>
       <td class="l"><span class="pill q-${r.q}">${r.q}</span></td>
       <td class="l">${sigPill(t.signal)}</td></tr>`);
-    t.symbols.forEach(s=>{const sb=s.sub||{};const tip='<b>'+s.sym+'</b>'+(s.name?' — '+s.name:'')+'<br>'+s.structure.label+(s.pattern?' · '+s.pattern.label:'');
+    (t.symbols||[]).forEach(s=>{const sb=s.sub||{};const tip=('<b>'+s.sym+'</b>'+(s.name?' — '+s.name:'')+'<br>'+s.structure.label+(s.pattern?' · '+s.pattern.label:'')).replace(/"/g,'&quot;');
       t1.insertAdjacentHTML('beforeend',`<tr class="member" data-p="${i}" hidden>
-      <td class="l" data-tip="${tip.replace(/"/g,'&quot;')}"><div class="symwrap ellip"><span class="mono">${s.sym}</span>${s.name?`<span class="nm ellip">${s.name}</span>`:''}</div></td>
-      <td>${sb.cipher!==undefined?fs(sb.cipher):''}</td><td>${sb.hull!==undefined?fs(sb.hull):''}</td>
-      <td>${sb.ma50!==undefined?fs(sb.ma50):''}</td><td>${sb.ma200!==undefined?fs(sb.ma200):''}</td>
+      <td class="l" data-tip="${tip}"><div class="symwrap ellip"><span class="mono">${s.sym}</span>${s.name?`<span class="nm ellip">${s.name}</span>`:''}</div></td>
+      <td class="subsc">${sb.cipher!==undefined?fs(sb.cipher):''}</td><td class="subsc">${sb.hull!==undefined?fs(sb.hull):''}</td>
+      <td class="subsc">${sb.ma50!==undefined?fs(sb.ma50):''}</td><td class="subsc">${sb.ma200!==undefined?fs(sb.ma200):''}</td>
       <td class="mono ${s.adx_mult>=1.2?'pos':s.adx_mult<=0.7?'mut':''}">${s.adx_mult!==undefined?'×'+s.adx_mult.toFixed(2):''}</td>
       <td class="mono">${Math.round(s.score)}</td>
       <td class="mono ${s.delta5>=0?'pos':'neg'}">${s.delta5>=0?'+':''}${Math.round(s.delta5)}</td>
       <td class="l"><span class="pill q-${s.quadrant}">${s.quadrant}</span></td>
       <td class="l">${sigPill(s.signal)}</td></tr>`);});
   });
-  t1.querySelectorAll('tr.theme').forEach(tr=>tr.onclick=()=>{
-    t1.querySelectorAll(`tr.member[data-p="${tr.dataset.i}"]`).forEach(m=>m.hidden=!m.hidden);});
+  t1.querySelectorAll('tr.theme').forEach(tr=>{
+    tr.onclick=()=>{t1.querySelectorAll(`tr.member[data-p="${tr.dataset.i}"]`).forEach(m=>m.hidden=!m.hidden);};
+    tr.onmouseenter=()=>highlight(tr.dataset.name);
+    tr.onmouseleave=()=>highlight(null);});
 
   const t2=document.querySelector('#t2 tbody');t2.innerHTML='';
   let rows2=[...rows];
-  if(sortK2){
-    const toneRank=x=>x===1?3:x===2?2:1;   // เขียว > น้ำเงิน > แดง
+  if(sortK2){const toneRank=x=>x===1?3:x===2?2:1;
     const key2=r=>({name:r.t.name,d1:r.t.chg.d1,d3:r.t.chg.d3,d5:r.t.chg.d5,d10:r.t.chg.d10,
-      struct:toneRank(r.t.structure.tone),
-      pat:r.t.pattern?toneRank(r.t.pattern.tone):0})[sortK2];
-    rows2.sort((a,b)=>{const ka=key2(a),kb=key2(b);
-      return(ka<kb?-1:ka>kb?1:0)*(sortAsc2?1:-1);});
-  }
+      struct:toneRank(r.t.structure.tone),pat:r.t.pattern?toneRank(r.t.pattern.tone):0})[sortK2];
+    rows2.sort((a,b)=>{const ka=key2(a),kb=key2(b);return(ka<kb?-1:ka>kb?1:0)*(sortAsc2?1:-1);});}
   rows2.forEach(r=>{const t=r.t,st=t.structure,pt=t.pattern;
-    t2.insertAdjacentHTML('beforeend',`<tr>
-      <td class="l" style="font-weight:600">${t.name} <span class="mut mono" style="font-weight:400;font-size:11px">${t.etf}</span></td>
+    t2.insertAdjacentHTML('beforeend',`<tr data-name="${t.name}">
+      <td class="l" style="font-weight:600">${t.name} <span class="mut mono" style="font-weight:400;font-size:11px">${t.etf||''}</span></td>
       <td class="l">${spark(t.px_hist)}</td>
       <td>${fp(t.chg.d1)}</td><td>${fp(t.chg.d3)}</td><td>${fp(t.chg.d5)}</td><td>${fp(t.chg.d10)}</td>
       <td class="l"><span class="pb t${st.tone}">${st.label}</span></td>
       <td class="l">${pt?`<span class="pb t${pt.tone}">🕯 ${pt.label}</span>`:'<span class="mut">–</span>'}</td></tr>`);});
+  t2.querySelectorAll('tr[data-name]').forEach(tr=>{
+    tr.onmouseenter=()=>highlight(tr.dataset.name);tr.onmouseleave=()=>highlight(null);});
 }
 
+function spark(px){
+  const w=84,h=24,mn=Math.min(...px),mx=Math.max(...px),rg=(mx-mn)||1;
+  const pt=px.map((v,i)=>`${(i/(px.length-1)*w).toFixed(1)},${(h-2-(v-mn)/rg*(h-4)).toFixed(1)}`).join(' ');
+  const mi=px.indexOf(mn),up=px[px.length-1]>=px[0],c=up?'#22c55e':'#ef4444';
+  const ly=(h-2-(px[px.length-1]-mn)/rg*(h-4)).toFixed(1);
+  return`<svg width="${w}" height="${h}"><polyline points="${pt}" fill="none" stroke="${c}" stroke-width="1.5"/>
+    <circle cx="${(mi/(px.length-1)*w).toFixed(1)}" cy="${h-2}" r="2.5" fill="#ef4444"/>
+    <circle cx="${w}" cy="${ly}" r="2.5" fill="${c}"/></svg>`;
+}
 
-// ---------- อัปโหลด watchlist ผ่าน GitHub API ----------
+// ---------- tooltip หัวคอลัมน์/แถวลูก ----------
+const tipEl=document.createElement('div');tipEl.id='tip';document.body.appendChild(tipEl);
+document.addEventListener('mouseover',e=>{
+  const t=e.target.closest('[data-tip]');
+  if(t){tipEl.innerHTML=t.dataset.tip;tipEl.style.opacity=1;}
+  else tipEl.style.opacity=0;});
+document.addEventListener('mousemove',e=>{
+  if(tipEl.style.opacity==='1'){
+    const w=tipEl.offsetWidth,x=Math.min(e.clientX+14,innerWidth-w-10);
+    const y=e.clientY+18+tipEl.offsetHeight>innerHeight?e.clientY-tipEl.offsetHeight-12:e.clientY+18;
+    tipEl.style.left=x+'px';tipEl.style.top=y+'px';}});
+
+// ---------- อัปโหลด watchlist (หลายลิสต์) ----------
 function wlInit(){
   const seg=location.pathname.split('/').filter(Boolean);
   const owner=location.hostname.endsWith('.github.io')?location.hostname.split('.')[0]:'';
@@ -367,26 +460,25 @@ async function wlUpload(){
   const o=document.getElementById('wlOwner').value.trim();
   const r=document.getElementById('wlRepo').value.trim();
   const tok=document.getElementById('wlTok').value.trim();
+  let nm=(document.getElementById('wlName').value.trim()||'Watchlist').replace(/[^\wก-๙ .\-]/g,'');
   if(!o||!r||!tok){st.textContent='กรอก owner / repo / token ให้ครบก่อนครับ';return;}
   let text=document.getElementById('wlText').value.trim();
   const f=document.getElementById('wlFile').files[0];
-  if(f) text=await f.text();
+  if(f){text=await f.text();if(!document.getElementById('wlName').value.trim())nm=f.name.replace(/\.txt$/i,'');}
   if(!text){st.textContent='ยังไม่มีรายชื่อ — เลือกไฟล์หรือ paste ก่อนครับ';return;}
   if(document.getElementById('wlRemember').checked){
     localStorage.setItem('wl_token',tok);localStorage.setItem('wl_owner',o);localStorage.setItem('wl_repo',r);
   }else localStorage.removeItem('wl_token');
   const H={'Authorization':'Bearer '+tok,'Accept':'application/vnd.github+json'};
-  const api=`https://api.github.com/repos/${o}/${r}/contents/watchlist.txt`;
+  const api=`https://api.github.com/repos/${o}/${r}/contents/watchlists/${encodeURIComponent(nm)}.txt`;
   try{
-    st.textContent='กำลัง commit watchlist.txt ...';
+    st.textContent='กำลัง commit watchlists/'+nm+'.txt ...';
     let sha=null;
     const g=await fetch(api,{headers:H});
     if(g.ok) sha=(await g.json()).sha;
-    else if(g.status!==404){
-      let m='';try{m=(await g.json()).message||'';}catch(e){}
-      st.textContent='❌ อ่าน repo ไม่ได้ ('+g.status+') GitHub บอกว่า: "'+m+'" — เช็กว่า repo ในช่องสะกดตรงกับชื่อจริง และ token ครอบคลุม repo นี้';return;}
-    const body={message:'watchlist: update via dashboard',
-      content:btoa(unescape(encodeURIComponent(text)))};
+    else if(g.status!==404){let m='';try{m=(await g.json()).message||'';}catch(e){}
+      st.textContent='❌ อ่าน repo ไม่ได้ ('+g.status+') GitHub บอกว่า: "'+m+'"';return;}
+    const body={message:'watchlist: '+nm+' via dashboard',content:btoa(unescape(encodeURIComponent(text)))};
     if(sha) body.sha=sha;
     const p=await fetch(api,{method:'PUT',headers:H,body:JSON.stringify(body)});
     if(!p.ok){let m='';try{m=(await p.json()).message||'';}catch(e){}
@@ -394,34 +486,12 @@ async function wlUpload(){
     st.textContent='✅ commit แล้ว · กำลังสั่งรัน workflow ...';
     const d=await fetch(`https://api.github.com/repos/${o}/${r}/actions/workflows/update.yml/dispatches`,
       {method:'POST',headers:H,body:JSON.stringify({ref:'main'})});
-    if(d.status===204) st.textContent='✅ เรียบร้อย! ระบบกำลังดึงข้อมูล+คำนวณ (~2–3 นาที) เสร็จแล้วรีเฟรชหน้านี้ (Ctrl+Shift+R) — ตัวใหม่จะอยู่ในธีม "Watchlist (TV)"';
+    if(d.status===204) st.textContent='✅ เรียบร้อย! "'+nm+'" จะขึ้นเป็น tab ใหม่ใน ~2–3 นาที — รีเฟรชหน้านี้ (Ctrl+Shift+R)';
     else{let m='';try{m=(await d.json()).message||'';}catch(e){}
-      st.textContent='⚠️ commit สำเร็จ แต่สั่งรัน workflow ไม่ได้ ('+d.status+') GitHub บอกว่า: "'+m+'" — หรือไปกด Run workflow เองในแท็บ Actions';}
+      st.textContent='⚠️ commit สำเร็จ แต่สั่งรัน workflow ไม่ได้ ('+d.status+') "'+m+'"';}
   }catch(e){st.textContent='❌ '+e.message;}
 }
 
-
-// ---------- tooltip หัวคอลัมน์ ----------
-const tipEl=document.createElement('div');tipEl.id='tip';document.body.appendChild(tipEl);
-document.addEventListener('mouseover',e=>{
-  const t=e.target.closest('[data-tip]');
-  if(t){tipEl.innerHTML=t.dataset.tip;tipEl.style.opacity=1;}
-  else tipEl.style.opacity=0;});
-document.addEventListener('mousemove',e=>{
-  if(tipEl.style.opacity==='1'){
-    const w=tipEl.offsetWidth,x=Math.min(e.clientX+14,innerWidth-w-10);
-    const y=e.clientY+18+tipEl.offsetHeight>innerHeight?e.clientY-tipEl.offsetHeight-12:e.clientY+18;
-    tipEl.style.left=x+'px';tipEl.style.top=y+'px';}});
-
-function spark(px){
-  const w=84,h=24,mn=Math.min(...px),mx=Math.max(...px),rg=(mx-mn)||1;
-  const pt=px.map((v,i)=>`${(i/(px.length-1)*w).toFixed(1)},${(h-2-(v-mn)/rg*(h-4)).toFixed(1)}`).join(' ');
-  const mi=px.indexOf(mn),up=px[px.length-1]>=px[0],c=up?'#22c55e':'#ef4444';
-  const lx=w,ly=(h-2-(px[px.length-1]-mn)/rg*(h-4)).toFixed(1);
-  return`<svg width="${w}" height="${h}"><polyline points="${pt}" fill="none" stroke="${c}" stroke-width="1.5"/>
-    <circle cx="${(mi/(px.length-1)*w).toFixed(1)}" cy="${h-2}" r="2.5" fill="#ef4444"/>
-    <circle cx="${lx}" cy="${ly}" r="2.5" fill="${c}"/></svg>`;
-}
 </script>
 </body>
 </html>
