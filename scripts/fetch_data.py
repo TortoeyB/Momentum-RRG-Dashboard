@@ -91,16 +91,34 @@ def parse_tv_watchlist(path: str) -> list[str]:
     return sorted(set(out))
 
 
-def all_symbols(cfg: dict, watchlist_path: str | None = None) -> list[str]:
+def load_watchlists(demo: bool = False) -> dict[str, list[str]]:
+    """อ่านทุกไฟล์ใน watchlists/*.txt (ชื่อไฟล์ = ชื่อ tab)
+    รองรับ watchlist.txt เดี่ยวแบบเก่าเป็น tab ชื่อ "Watchlist" """
+    out: dict[str, list[str]] = {}
+    wdir = os.path.join(ROOT, "watchlists")
+    if os.path.isdir(wdir):
+        for f in sorted(os.listdir(wdir)):
+            if f.lower().endswith(".txt"):
+                syms = parse_tv_watchlist(os.path.join(wdir, f))
+                if syms:
+                    out[os.path.splitext(f)[0]] = syms
+    legacy = os.path.join(ROOT, "watchlist.txt")
+    if os.path.exists(legacy):
+        syms = parse_tv_watchlist(legacy)
+        if syms:
+            out.setdefault("Watchlist", syms)
+    if out:
+        print(f"[watchlist] พบ {len(out)} ลิสต์: {', '.join(out)}")
+    return out
+
+
+def all_symbols(cfg: dict, extra: list[str] | None = None) -> list[str]:
     syms = {cfg.get("benchmark", "SPY")}
     for t in cfg["themes"]:
         syms.update(t["etfs"])
         syms.update(t["stocks"])
-    if watchlist_path:
-        extra = parse_tv_watchlist(watchlist_path)
-        if extra:
-            print(f"[watchlist] merge {len(extra)} symbols จาก {watchlist_path}")
-            syms.update(extra)
+    if extra:
+        syms.update(extra)
     return sorted(syms)
 
 
@@ -212,9 +230,9 @@ def load_names(symbols: list[str], demo: bool = False) -> dict[str, str]:
     return names
 
 
-def get_data(cfg: dict, demo: bool = False, watchlist: str | None = None,
+def get_data(cfg: dict, demo: bool = False, extra: list[str] | None = None,
              force: bool = False) -> dict[str, pd.DataFrame]:
-    syms = all_symbols(cfg, watchlist)
+    syms = all_symbols(cfg, extra)
     if demo:
         print(f"[demo] สร้างข้อมูลจำลอง {len(syms)} symbols")
         return synth_ohlcv(syms)
@@ -223,6 +241,7 @@ def get_data(cfg: dict, demo: bool = False, watchlist: str | None = None,
 
 if __name__ == "__main__":
     cfg = load_themes()
-    wl = os.path.join(ROOT, "watchlist.txt")
-    d = get_data(cfg, demo="--demo" in sys.argv, watchlist=wl)
+    wl = load_watchlists()
+    extra = sorted({x for v in wl.values() for x in v})
+    d = get_data(cfg, demo="--demo" in sys.argv, extra=extra)
     print(f"ได้ข้อมูล {len(d)} symbols")
