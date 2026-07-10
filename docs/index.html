@@ -213,6 +213,11 @@ footer{margin-top:34px;color:var(--ink3);font-size:12.5px;border-top:1px solid v
             style="flex:1;min-width:240px" class="wlin"></textarea>
           <button class="tg on" id="wlGo" style="padding:8px 18px">อัปโหลด & รันอัปเดต</button>
         </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap">
+          <span style="color:var(--ink3);font-size:12.5px">ลบลิสต์:</span>
+          <select id="wlDelSel" class="wlin" style="min-width:150px"></select>
+          <button class="tg" id="wlDel" style="color:var(--lag);border-color:rgba(239,68,68,.4)">ลบลิสต์นี้</button>
+        </div>
         <div id="wlStatus" style="margin-top:8px;font-size:13px;color:var(--ink3)"></div>
         <div style="margin-top:8px;font-size:12px;color:var(--ink3)">
           🔑 สร้าง token ครั้งเดียวที่ github.com → Settings → Developer settings →
@@ -454,6 +459,41 @@ function wlInit(){
   document.getElementById('wlRepo').value=localStorage.getItem('wl_repo')||seg[0]||'';
   document.getElementById('wlTok').value=localStorage.getItem('wl_token')||'';
   document.getElementById('wlGo').onclick=wlUpload;
+  const sel=document.getElementById('wlDelSel');sel.innerHTML='';
+  (D.watchlists||[]).forEach(w=>{const o=document.createElement('option');o.value=o.textContent=w.name;sel.appendChild(o);});
+  if(!sel.options.length){const o=document.createElement('option');o.textContent='— ยังไม่มีลิสต์ —';o.disabled=true;sel.appendChild(o);}
+  document.getElementById('wlDel').onclick=wlDelete;
+}
+async function ghDelete(o,r,H,path,msg){
+  const api=`https://api.github.com/repos/${o}/${r}/contents/${path}`;
+  const g=await fetch(api,{headers:H});
+  if(!g.ok) return g.status;
+  const sha=(await g.json()).sha;
+  const d=await fetch(api,{method:'DELETE',headers:H,body:JSON.stringify({message:msg,sha})});
+  return d.ok?200:d.status;
+}
+async function wlDelete(){
+  const st=document.getElementById('wlStatus');
+  const sel=document.getElementById('wlDelSel');
+  const nm=sel.value;
+  if(!nm||sel.selectedOptions[0].disabled){st.textContent='ยังไม่มีลิสต์ให้ลบ';return;}
+  const o=document.getElementById('wlOwner').value.trim();
+  const r=document.getElementById('wlRepo').value.trim();
+  const tok=document.getElementById('wlTok').value.trim();
+  if(!o||!r||!tok){st.textContent='กรอก owner / repo / token ให้ครบก่อนครับ';return;}
+  if(!confirm('ลบลิสต์ "'+nm+'" และ tab ของมันออกจาก dashboard?'))return;
+  const H={'Authorization':'Bearer '+tok,'Accept':'application/vnd.github+json'};
+  try{
+    st.textContent='กำลังลบ '+nm+' ...';
+    let code=await ghDelete(o,r,H,'watchlists/'+encodeURIComponent(nm)+'.txt','watchlist: delete '+nm);
+    if(code===404&&nm==='Watchlist') code=await ghDelete(o,r,H,'watchlist.txt','watchlist: delete legacy');
+    if(code!==200){st.textContent='❌ ลบไม่สำเร็จ ('+code+') — เช็กชื่อ/สิทธิ์ token';return;}
+    st.textContent='✅ ลบแล้ว · กำลังสั่งรัน workflow ...';
+    const d=await fetch(`https://api.github.com/repos/${o}/${r}/actions/workflows/update.yml/dispatches`,
+      {method:'POST',headers:H,body:JSON.stringify({ref:'main'})});
+    st.textContent=d.status===204?'✅ เรียบร้อย! tab "'+nm+'" จะหายใน ~2–3 นาที — แล้วรีเฟรชหน้านี้ (Ctrl+Shift+R)'
+      :'⚠️ ลบไฟล์แล้ว แต่สั่งรัน workflow ไม่ได้ ('+d.status+') — ไปกด Run workflow เองใน Actions';
+  }catch(e){st.textContent='❌ '+e.message;}
 }
 async function wlUpload(){
   const st=document.getElementById('wlStatus');
