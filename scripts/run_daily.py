@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from fetch_data import ROOT, load_themes, get_data, parse_tv_watchlist, load_names
+from fetch_data import ROOT, load_themes, get_data, load_watchlists, load_names
 from scoring import score_series, quadrant, price_structure, significant_pattern, signal
 
 TAIL_LEN = 8        # จำนวนจุดของหางบนกราф RRG
@@ -49,6 +49,10 @@ def symbol_payload(sym: str, sc: pd.DataFrame, df: pd.DataFrame, name: str = "")
     return {
         "sym": sym,
         "name": name,
+        "score_hist": [round(float(v), 1) for v in s.tail(HIST_LEN)],
+        "score_dates": [d.strftime("%d %b") for d in s.tail(HIST_LEN).index],
+        "px_hist": [round(float(v), 2) for v in df["Close"].tail(PX_LEN)],
+        "chg": {f"d{d}": pct_change(df["Close"], d) for d in (1, 3, 5, 10)},
         "sub": {k: round(float(last[f"{k}_sc"]), 1)
                 for k in ("cipher", "hull", "ma50", "ma200")},
         "adx_mult": round(float(last["adx_mult"]), 2),
@@ -66,21 +70,12 @@ def main():
     demo = "--demo" in sys.argv
     force = "--force" in sys.argv
     cfg = load_themes()
-    wl = os.path.join(ROOT, "watchlist.txt")
-    data = get_data(cfg, demo=demo, watchlist=wl if os.path.exists(wl) else None,
-                    force=force)
+    wl = load_watchlists(demo=demo)
+    if demo and not wl:
+        wl = {"Demo WL": ["NVDA", "MSFT", "GLD", "XLE", "COIN", "JPM", "LLY", "URA"]}
+    extra = sorted({x for v in wl.values() for x in v})
+    data = get_data(cfg, demo=demo, extra=extra, force=force)
 
-    # symbol จาก watchlist ที่ไม่อยู่ในธีมไหนเลย → รวมเป็นธีม "Watchlist (TV)"
-    if os.path.exists(wl):
-        in_themes = set()
-        for t in cfg["themes"]:
-            in_themes.update(t["etfs"]); in_themes.update(t["stocks"])
-        extras = [x for x in parse_tv_watchlist(wl)
-                  if x not in in_themes and x in data]
-        if extras:
-            print(f"[watchlist] เพิ่มธีม Watchlist (TV): {', '.join(extras)}")
-            cfg["themes"].append({"name": "Watchlist (TV)",
-                                  "etfs": [], "stocks": extras})
     if not data:
         raise SystemExit("ไม่มีข้อมูลราคาเลย — ตรวจการเชื่อมต่อ/รายชื่อ symbol")
 
@@ -135,6 +130,7 @@ def main():
         px = ref_df["Close"].tail(PX_LEN)
         themes_out.append({
             "name": t["name"],
+            "group": t.get("group", "อื่นๆ"),
             "etf": ref,
             "members": members,
             "score_hist": hist,
@@ -152,8 +148,12 @@ def main():
         })
 
     as_of = max(df.index[-1] for df in data.values()).strftime("%Y-%m-%d")
+    watchlists_out = [{"name": k,
+                       "symbols": [symbol_payload(x, scores[x], data[x], names.get(x, ""))
+                                   for x in v if x in scores]}
+                      for k, v in wl.items()]
     payload = {"as_of": as_of, "demo": demo, "tail_len": TAIL_LEN,
-               "themes": themes_out}
+               "themes": themes_out, "watchlists": watchlists_out}
 
     out = os.path.join(ROOT, "docs", "data.json")
     with open(out, "w", encoding="utf-8") as f:
