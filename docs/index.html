@@ -238,7 +238,7 @@ footer{margin-top:34px;color:var(--ink3);font-size:12.5px;border-top:1px solid v
   <div class="card" style="overflow-x:auto">
     <table id="t1"><thead><tr>
       <th class="l" data-k="name" style="width:210px">ธีม</th><th data-k="cipher" data-tip="<b>Cipher B (น้ำหนัก 35%)</b> คะแนน -2 ถึง +2 จากสัญญาณใน VMC Cipher B: WaveTrend ตัดขึ้น/ลงในโซน oversold/overbought (±1.5), divergence (±1), money flow เขียว/แดง (±0.5) · ถ้าเกิด gold buy ได้ +2 ทันที">Cipher B</th>
-      <th data-k="hull" data-tip="<b>Hull MA 9/20 (น้ำหนัก 25%)</b> เส้นค่าเฉลี่ยตอบสนองเร็ว: HMA9 อยู่เหนือ/ใต้ HMA20 (±1) + ความชันของ HMA9 (±1) — จับการเปลี่ยนเทรนด์ระยะสั้นได้ไวกว่า MA ปกติ">Hull 9/20</th><th data-k="ma50" data-tip="<b>MA50 (น้ำหนัก 20%)</b> เทรนด์กลาง: ราคาเหนือ/ใต้เส้น (±1) + ความชันเส้น (±1) · ถ้าราคายืดห่างเส้นเกิน 12% โดนหักคะแนนกลับ (กันไล่ราคาตอนยืดเกิน)">MA50</th><th data-k="ma200" data-tip="<b>MA200 (น้ำหนัก 20%)</b> เทรนด์ใหญ่: ราคาเหนือ/ใต้เส้น (±1) + ความชันเส้น (±1) — ตัวถ่วงไม่ให้สัญญาณสั้นพาออกนอกเทรนด์หลัก">MA200</th>
+      <th data-k="hull" data-tip="<b>Hull MA 9/20 (น้ำหนัก 25%)</b> เส้นค่าเฉลี่ยตอบสนองเร็ว: HMA9 vs HMA20 (±1) + ราคาเหนือ/ใต้ HMA9 (±0.5) + ความชัน HMA9 (±0.5) — ราคาหลุดเส้นเมื่อไหร่คะแนนลดทันทีแม้ ribbon ยังเขียว">Hull 9/20</th><th data-k="ma50" data-tip="<b>MA50 (น้ำหนัก 20%)</b> เทรนด์กลาง: % ระยะห่างจากเส้นแบบไล่ระดับ (±5% = เต็ม ±1) + ความชันเส้น (±1) · ยืดเกิน 12% โดนหักไล่ระดับ (เตือน mean reversion)">MA50</th><th data-k="ma200" data-tip="<b>MA200 (น้ำหนัก 20%)</b> เทรนด์ใหญ่: % ระยะห่างจากเส้นแบบไล่ระดับ (±10% = เต็ม ±1) + ความชันเส้น (±1) — ตัวถ่วงไม่ให้สัญญาณสั้นพาออกนอกเทรนด์หลัก">MA200</th>
       <th data-k="adx" data-tip="<b>ADX (14,14) — ตัวคูณความมั่นใจ</b> ไม่ใช่คะแนนบวกลบ แต่คูณส่วนเบี่ยงจาก 50: ADX≥35 เทรนด์แรง ×1.25 · 20–35 ปกติ ×1.00 · &lt;20 ตลาด sideways ×0.60 (ลดความเชื่อทุกสัญญาณ)">ADX</th><th data-k="score" data-tip="<b>คะแนนรวม 0–100</b> รวมถ่วงน้ำหนัก Cipher 35 / Hull 25 / MA50 20 / MA200 20 แล้วคูณ ADX · 50 = เส้นแบ่งกลาง (แกน X ของกราฟ) · &gt;50 สัญญาณฝั่งบวกคุม">คะแนน</th><th data-k="d5" data-tip="<b>Δ5D — score momentum</b> คะแนนวันนี้เทียบ 5 วันก่อน (แกน Y ของกราฟ) · บวก = สัญญาณกำลังดีขึ้น ลบ = กำลังเสื่อม — ตัวนี้คือหัวใจของการหมุน quadrant">Δ5D</th>
       <th class="l" data-k="quad" data-tip="<b>Quadrant</b> Leading = สูง+ดีขึ้น ถือต่อ · Weakening = สูงแต่แผ่ว ทยอยลด · Lagging = อ่อน+แย่ลง รอ · Improving = อ่อนแต่ฟื้น โซนหาจุดเข้า">สถานะ</th><th class="l" data-k="sig" data-tip="<b>Signal checklist 0–10</b> BUY/SELL ≥7 · ACCUM 5–6 + โครงสร้างยืนยัน + MF ไม่แดง (เริ่มไม้แรก) · WATCH/REDUCE 4–6 · HOLD = Leading อยู่แล้ว ไม่ใช่จุดเข้าใหม่ · – = ไม่มีอะไรให้ทำ">Signal</th>
     </tr></thead><tbody></tbody></table>
@@ -343,7 +343,7 @@ function renderCards(rows){
   list.forEach(r=>{const t=r.t,g=t.signal;
     el.insertAdjacentHTML('beforeend',`<div class="setup">
       <div class="head"><span class="name">${t.name}${t.fullname?' <span class="mut" style="font-weight:400;font-size:12px">'+t.fullname+'</span>':''}</span>
-      <span class="pill s-${g.grade}">${g.grade} ${g.score}/10</span></div>
+      <span class="pill s-${g.grade}">${g.grade} ${g.score}/10${g.days!==undefined?' · '+(g.days===0?'วันนี้':'ตั้งแต่ '+g.since):''}</span></div>
       ${g.checklist.map(([txt,ok])=>`<div class="chk ${ok?'':'off'}">
         <span class="ic" style="color:${ok?'var(--lead)':'var(--ink3)'}">${ok?'✓':'–'}</span><span>${txt}</span></div>`).join('')}
     </div>`);});
@@ -411,7 +411,10 @@ function renderChart(rows){
     lg.appendChild(c);});
 }
 
-function sigPill(g){return g?`<span class="pill s-${g.grade}">${g.grade}${g.score?' '+g.score+'/10':''}</span>`:'<span class="mut">–</span>';}
+function sigPill(g){if(!g)return'<span class="mut">–</span>';
+  const age=g.days!==undefined?` · ${g.days===0?'วันนี้':g.days+'d'}`:'';
+  const tip=g.since?` data-tip="ให้สัญญาณ ${g.grade} ตั้งแต่ ${g.since}${g.days?` (${g.days} วันก่อน)`:' (วันนี้)'}"`:'';
+  return`<span class="pill s-${g.grade}"${tip}>${g.grade}${g.score?' '+g.score+'/10':''}${age}</span>`;}
 const bar=(v,max,color)=>`<span class="fill" style="background:${color};width:${Math.min(Math.abs(v)/max*100,100)}%"></span>`;
 
 function renderTables(rows){
@@ -541,33 +544,4 @@ async function wlUpload(){
   let text=document.getElementById('wlText').value.trim();
   const f=document.getElementById('wlFile').files[0];
   if(f){text=await f.text();if(!document.getElementById('wlName').value.trim())nm=f.name.replace(/\.txt$/i,'');}
-  if(!text){st.textContent='ยังไม่มีรายชื่อ — เลือกไฟล์หรือ paste ก่อนครับ';return;}
-  if(document.getElementById('wlRemember').checked){
-    localStorage.setItem('wl_token',tok);localStorage.setItem('wl_owner',o);localStorage.setItem('wl_repo',r);
-  }else localStorage.removeItem('wl_token');
-  const H={'Authorization':'Bearer '+tok,'Accept':'application/vnd.github+json'};
-  const api=`https://api.github.com/repos/${o}/${r}/contents/watchlists/${encodeURIComponent(nm)}.txt`;
-  try{
-    st.textContent='กำลัง commit watchlists/'+nm+'.txt ...';
-    let sha=null;
-    const g=await fetch(api,{headers:H});
-    if(g.ok) sha=(await g.json()).sha;
-    else if(g.status!==404){let m='';try{m=(await g.json()).message||'';}catch(e){}
-      st.textContent='❌ อ่าน repo ไม่ได้ ('+g.status+') GitHub บอกว่า: "'+m+'"';return;}
-    const body={message:'watchlist: '+nm+' via dashboard',content:btoa(unescape(encodeURIComponent(text)))};
-    if(sha) body.sha=sha;
-    const p=await fetch(api,{method:'PUT',headers:H,body:JSON.stringify(body)});
-    if(!p.ok){let m='';try{m=(await p.json()).message||'';}catch(e){}
-      st.textContent='❌ commit ไม่สำเร็จ ('+p.status+') GitHub บอกว่า: "'+m+'"';return;}
-    st.textContent='✅ commit แล้ว · กำลังสั่งรัน workflow ...';
-    const d=await fetch(`https://api.github.com/repos/${o}/${r}/actions/workflows/update.yml/dispatches`,
-      {method:'POST',headers:H,body:JSON.stringify({ref:'main'})});
-    if(d.status===204) st.textContent='✅ เรียบร้อย! "'+nm+'" จะขึ้นเป็น tab ใหม่ใน ~2–3 นาที — รีเฟรชหน้านี้ (Ctrl+Shift+R)';
-    else{let m='';try{m=(await d.json()).message||'';}catch(e){}
-      st.textContent='⚠️ commit สำเร็จ แต่สั่งรัน workflow ไม่ได้ ('+d.status+') "'+m+'"';}
-  }catch(e){st.textContent='❌ '+e.message;}
-}
-
-</script>
-</body>
-</html>
+  if(!text){st.textContent='
