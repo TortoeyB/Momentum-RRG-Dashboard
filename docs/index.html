@@ -544,4 +544,33 @@ async function wlUpload(){
   let text=document.getElementById('wlText').value.trim();
   const f=document.getElementById('wlFile').files[0];
   if(f){text=await f.text();if(!document.getElementById('wlName').value.trim())nm=f.name.replace(/\.txt$/i,'');}
-  if(!text){st.textContent='
+  if(!text){st.textContent='ยังไม่มีรายชื่อ — เลือกไฟล์หรือ paste ก่อนครับ';return;}
+  if(document.getElementById('wlRemember').checked){
+    localStorage.setItem('wl_token',tok);localStorage.setItem('wl_owner',o);localStorage.setItem('wl_repo',r);
+  }else localStorage.removeItem('wl_token');
+  const H={'Authorization':'Bearer '+tok,'Accept':'application/vnd.github+json'};
+  const api=`https://api.github.com/repos/${o}/${r}/contents/watchlists/${encodeURIComponent(nm)}.txt`;
+  try{
+    st.textContent='กำลัง commit watchlists/'+nm+'.txt ...';
+    let sha=null;
+    const g=await fetch(api,{headers:H});
+    if(g.ok) sha=(await g.json()).sha;
+    else if(g.status!==404){let m='';try{m=(await g.json()).message||'';}catch(e){}
+      st.textContent='❌ อ่าน repo ไม่ได้ ('+g.status+') GitHub บอกว่า: "'+m+'"';return;}
+    const body={message:'watchlist: '+nm+' via dashboard',content:btoa(unescape(encodeURIComponent(text)))};
+    if(sha) body.sha=sha;
+    const p=await fetch(api,{method:'PUT',headers:H,body:JSON.stringify(body)});
+    if(!p.ok){let m='';try{m=(await p.json()).message||'';}catch(e){}
+      st.textContent='❌ commit ไม่สำเร็จ ('+p.status+') GitHub บอกว่า: "'+m+'"';return;}
+    st.textContent='✅ commit แล้ว · กำลังสั่งรัน workflow ...';
+    const d=await fetch(`https://api.github.com/repos/${o}/${r}/actions/workflows/update.yml/dispatches`,
+      {method:'POST',headers:H,body:JSON.stringify({ref:'main'})});
+    if(d.status===204) st.textContent='✅ เรียบร้อย! "'+nm+'" จะขึ้นเป็น tab ใหม่ใน ~2–3 นาที — รีเฟรชหน้านี้ (Ctrl+Shift+R)';
+    else{let m='';try{m=(await d.json()).message||'';}catch(e){}
+      st.textContent='⚠️ commit สำเร็จ แต่สั่งรัน workflow ไม่ได้ ('+d.status+') "'+m+'"';}
+  }catch(e){st.textContent='❌ '+e.message;}
+}
+
+</script>
+</body>
+</html>
