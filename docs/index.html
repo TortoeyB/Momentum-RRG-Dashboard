@@ -268,7 +268,7 @@ let D=null,tab='__themes__',lag=5,TAIL=8,sigOnly=false,chart=null,hi=null,
 const app=document.getElementById('app');
 fetch('data.json?v='+Date.now()).then(r=>{if(!r.ok)throw 0;return r.json()})
  .then(j=>{D=j;init();})
- .catch(()=>{app.innerHTML='<div class="err">โหลด data.json ไม่ได้ — รัน scripts/run_daily.py ก่อน แล้วเปิดผ่าน http server</div>';});
+ .catch(e=>{app.innerHTML='<div class="err">โหลด data.json ไม่ได้ — '+(e&&e.message?('('+e.message+') '):'')+'รัน scripts/run_daily.py ก่อน แล้วเปิดผ่าน http server</div>';});
 
 const fade=(hex,a)=>hex+Math.round(a*255).toString(16).padStart(2,'0');
 const quad=(x,y)=>x>=50?(y>=0?'Leading':'Weakening'):(y>=0?'Improving':'Lagging');
@@ -568,9 +568,4 @@ async function wlUpload(){
     if(d.status===204) st.textContent='✅ เรียบร้อย! "'+nm+'" จะขึ้นเป็น tab ใหม่ใน ~2–3 นาที — รีเฟรชหน้านี้ (Ctrl+Shift+R)';
     else{let m='';try{m=(await d.json()).message||'';}catch(e){}
       st.textContent='⚠️ commit สำเร็จ แต่สั่งรัน workflow ไม่ได้ ('+d.status+') "'+m+'"';}
-  }catch(e){st.textContent='❌ '+e.message;}
-}
-
-</script>
-</body>
-</html>
+  }catch(e){st.textContent='❌ '+
