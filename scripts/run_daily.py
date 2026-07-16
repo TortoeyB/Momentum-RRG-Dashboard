@@ -22,6 +22,18 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fetch_data import ROOT, load_themes, get_data, load_watchlists, load_names
 from scoring import score_series, quadrant, price_structure, significant_pattern, signal, signal_with_age
+import math
+
+
+def _clean(o):
+    """แปลง NaN/Inf -> null ก่อนเขียน JSON (browser parse NaN ไม่ได้)"""
+    if isinstance(o, dict):
+        return {k: _clean(v) for k, v in o.items()}
+    if isinstance(o, list):
+        return [_clean(x) for x in o]
+    if isinstance(o, float) and (math.isnan(o) or math.isinf(o)):
+        return None
+    return o
 
 TAIL_LEN = 8        # จำนวนจุดของหางบนกราф RRG
 HIST_LEN = 20       # เก็บคะแนนย้อนหลังกี่วัน (พอสำหรับ Δ10D + หาง 8 จุด)
@@ -148,14 +160,4 @@ def main():
 
     out = os.path.join(ROOT, "docs", "data.json")
     with open(out, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, separators=(",", ":"))
-    print(f"[done] เขียน {out}  ({len(themes_out)} ธีม, as of {as_of})")
-
-    bdir = os.path.join(ROOT, "backup")
-    os.makedirs(bdir, exist_ok=True)
-    shutil.copy(out, os.path.join(bdir, f"data_{as_of}.json"))
-    print(f"[done] backup → backup/data_{as_of}.json")
-
-
-if __name__ == "__main__":
-    main()
+        json.dump(_clean(payload), 
