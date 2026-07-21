@@ -259,4 +259,12 @@ def signal(sc: pd.DataFrame, quad_now: str, quad_prev: str,
     if sell_score >= 7:
         return pack("SELL", min(sell_score, 10), s)
     if (buy_score >= 5 and buy_score >= sell_score
-            and structu
+            and structure["code"] in ("higher_low", "higher_high") and mf_green):
+        return pack("ACCUM", buy_score, b)
+    if buy_score >= 4 and buy_score >= sell_score:
+        return pack("WATCH", buy_score, b)
+    if sell_score >= 4:
+        return pack("REDUCE", sell_score, s)
+    if quad_now == "Leading" and float(last["score"]) >= 60:
+        return {"grade": "HOLD", "score": 0, "checklist": []}
+    return None
