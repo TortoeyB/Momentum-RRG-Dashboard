@@ -5,6 +5,13 @@ on:
     # 21:30 UTC = หลังตลาด US ปิด (จ.-ศ.) — ตรงกับ ~04:30 เช้าเวลาไทย
     - cron: "30 21 * * 1-5"
   workflow_dispatch: {}   # กดรันเองได้จากหน้า Actions
+  push:
+    branches: [main]
+    # รันเมื่อแก้ "โค้ด" เท่านั้น — ไม่รวม data.json/backup ที่บอทเขียนกลับ (กัน loop)
+    paths:
+      - "scripts/**"
+      - "requirements.txt"
+      - ".github/workflows/update.yml"
 
 permissions:
   contents: write
@@ -17,6 +24,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Syntax check (fail fast)
+        run: python -m compileall -q scripts
       - run: pip install -r requirements.txt
       - run: python scripts/run_daily.py --force
       - name: Commit updated data
