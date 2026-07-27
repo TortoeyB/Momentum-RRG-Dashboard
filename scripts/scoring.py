@@ -42,6 +42,12 @@ HARD_DOWN_RET = -0.03   # ผลตอบแทนแท่งเดียวท
 HARD_DOWN_LOC = 0.25    # ปิดในโซนล่าง x% ของ range วัน (0 = ปิดที่ low พอดี)
 WT_SPREAD_NORM = 5.0    # ตัวหาร normalize spread WT1-WT2 ให้เป็นคะแนน graded
 
+# ตัวคูณ ADX — เดิมเป็นบันได 0.6 / 1.0 / 1.25 ตัดที่ 20 กับ 35
+# ทำให้ ADX ต่างกัน 1 หน่วยรอบเส้นแบ่ง ทำคะแนนต่างกันได้ถึง ~17 (เคส SMH vs SOXX)
+# เปลี่ยนเป็นไล่ระดับต่อเนื่องผ่าน np.interp — เจตนาเดิมคงอยู่ แต่ไม่มีหน้าผา
+ADX_KNOTS_X = [10.0, 20.0, 35.0, 45.0]
+ADX_KNOTS_Y = [0.60, 0.80, 1.10, 1.25]
+
 # ----------------------------------------------------------------
 # bar-level shock: มองแท่งล่าสุดตรง ๆ
 # ----------------------------------------------------------------
@@ -131,7 +137,11 @@ def score_series(df: pd.DataFrame) -> pd.DataFrame:
     raw = np.divide(num, den, out=np.zeros_like(num), where=den > 0)
     base = 50 + raw * 25
 
-    mult = np.where(ind["adx"] >= 35, 1.25, np.where(ind["adx"] < 20, 0.6, 1.0))
+    adx_v = np.asarray(ind["adx"], dtype=float)
+    mult = np.interp(adx_v, ADX_KNOTS_X, ADX_KNOTS_Y)
+    # ADX ยังเป็น NaN ช่วง warm-up -> ใช้ 1.0 เท่าพฤติกรรมเดิม
+    mult = np.where(np.isnan(adx_v), 1.0,
+                    np.clip(mult, ADX_KNOTS_Y[0], ADX_KNOTS_Y[-1]))
     score = np.clip(50 + (base - 50) * mult, 0, 100)
 
     out = pd.DataFrame(index=df.index)
