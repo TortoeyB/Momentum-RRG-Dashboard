@@ -8,6 +8,7 @@ fetch_data.py — โหลดรายชื่อ symbol และดึง OH
 - โหมด --demo สร้างข้อมูลจำลอง (ใช้ทดสอบ pipeline โดยไม่ต้องต่อเน็ต)
 """
 
+import collections
 import json
 import os
 import re
@@ -23,6 +24,8 @@ os.makedirs(CACHE, exist_ok=True)
 
 HISTORY_DAYS = 400
 CACHE_TTL_HOURS = 6      # cache เก่ากว่านี้ถือว่าหมดอายุ ดึงใหม่
+BATCH_SIZE = 40          # ดึงทีละกี่ symbol ต่อคำสั่ง (ก้อนใหญ่ทำให้แท่งล่าสุดหาย)
+REPAIR_SLEEP = 0.15      # หน่วงระหว่างดึงซ้ำทีละตัว กัน Yahoo throttle
 
 # รหัสดัชนี/FX/commodity ของ TradingView → ticker ของ Yahoo Finance
 TV_TO_YAHOO = {
@@ -152,10 +155,61 @@ def _tidy(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def fetch_ohlcv(symbols: list[str], force: bool = False) -> dict[str, pd.DataFrame]:
+# กลุ่มปฏิทินการซื้อขาย — ต้องแยกดึง ไม่งั้น yfinance ต้อง align index ข้ามปฏิทิน
+# แล้วแท่งล่าสุดของกลุ่มที่ปิดทีหลังจะกลายเป็น NaN ทั้งแถว
+ASIA_TICKERS = {"^N225", "^HSI", "^HSTECH", "^KS11", "^BSESN", "^NSEI",
+                "000300.SS", "000905.SS"}
+EU_TICKERS = {"^STOXX50E", "^STOXX"}
+
+
+def _calendar_group(sym: str) -> str:
+    if sym.endswith("-USD"):
+        return "crypto"      # 7 วัน/สัปดาห์
+    if sym.endswith("=F"):
+        return "futures"     # เกือบ 24 ชม.
+    if sym.endswith("=X") or sym == "DX-Y.NYB":
+        return "fx"
+    if sym.endswith(".BK"):
+        return "th"
+    if sym in ASIA_TICKERS or sym.endswith((".SS", ".SZ", ".HK", ".T", ".KS")):
+        return "asia"        # ปิดก่อน US ครึ่งวัน
+    if sym in EU_TICKERS or sym.endswith((".L", ".DE", ".PA", ".AS")):
+        return "eu"
+    return "us"
+
+
+def _download_batch(syms: list[str]) -> dict[str, pd.DataFrame]:
+    """ดึงเป็นก้อนเล็ก — คืนเฉพาะตัวที่ได้ข้อมูลพอ"""
     import yfinance as yf
 
-    data = {}
+    out: dict[str, pd.DataFrame] = {}
+    raw = yf.download(syms, period=f"{HISTORY_DAYS}d", interval="1d",
+                      group_by="ticker", auto_adjust=True, progress=False,
+                      threads=True)
+    for s in syms:
+        try:
+            df = raw[s].dropna(how="all") if len(syms) > 1 else raw.dropna(how="all")
+            df = _tidy(df)
+            if len(df) >= 60:
+                out[s] = df
+        except Exception:  # noqa
+            pass
+    return out
+
+
+def _download_one(sym: str) -> pd.DataFrame | None:
+    """ดึงทีละตัว — ไม่มีการ align ข้ามปฏิทิน จึงได้แท่งล่าสุดครบเสมอ"""
+    import yfinance as yf
+
+    df = yf.download(sym, period=f"{HISTORY_DAYS}d", interval="1d",
+                     auto_adjust=True, progress=False, threads=False)
+    df = df.droplevel(1, axis=1) if hasattr(df.columns, "levels") else df
+    df = _tidy(df)
+    return df if len(df) >= 60 else None
+
+
+def fetch_ohlcv(symbols: list[str], force: bool = False) -> dict[str, pd.DataFrame]:
+    data: dict[str, pd.DataFrame] = {}
     to_fetch = []
     for s in symbols:
         fp = os.path.join(CACHE, f"{s}.parquet")
@@ -170,36 +224,66 @@ def fetch_ohlcv(symbols: list[str], force: bool = False) -> dict[str, pd.DataFra
                     continue
         to_fetch.append(s)
 
-    if to_fetch:
-        print(f"[fetch] ดึงราคา {len(to_fetch)} symbols จาก yfinance ...")
-        raw = yf.download(to_fetch, period=f"{HISTORY_DAYS}d", interval="1d",
-                          group_by="ticker", auto_adjust=True, progress=False,
-                          threads=True)
-        for s in to_fetch:
+    if not to_fetch:
+        return data
+
+    groups: dict[str, list[str]] = collections.defaultdict(list)
+    for s in to_fetch:
+        groups[_calendar_group(s)].append(s)
+    print(f"[fetch] ดึงราคา {len(to_fetch)} symbols · "
+          f"{len(groups)} กลุ่มปฏิทิน ({', '.join(f'{k}:{len(v)}' for k, v in sorted(groups.items()))})")
+
+    for g, syms in sorted(groups.items()):
+        for i in range(0, len(syms), BATCH_SIZE):
+            batch = syms[i:i + BATCH_SIZE]
             try:
-                df = raw[s].dropna(how="all") if len(to_fetch) > 1 else raw.dropna(how="all")
-                df = _tidy(df)
-                if len(df) < 60:
-                    print(f"[warn] {s}: ข้อมูลน้อยเกิน ({len(df)} แถว) — ข้าม")
-                    continue
-                df.to_parquet(os.path.join(CACHE, f"{s}.parquet"))
-                data[s] = df
+                data.update(_download_batch(batch))
             except Exception as e:  # noqa
-                print(f"[warn] {s}: ดึงไม่สำเร็จ ({e}) — ข้าม")
-        # retry ตัวที่หลุด (เช่น database is locked จากการดึงพร้อมกัน) ทีละตัว
-        missing = [s for s in to_fetch if s not in data]
-        for s in missing:
+                print(f"[warn] batch {g}[{i}:{i + len(batch)}] ล้มเหลว ({e})")
+
+    # ---- ตรวจซ่อม: ตัวที่หลุด + ตัวที่แท่งล่าสุดเก่ากว่าเพื่อนในกลุ่มเดียวกัน ----
+    missing = [s for s in to_fetch if s not in data]
+    stale: list[str] = []
+    for g, syms in groups.items():
+        lasts = {s: data[s].index[-1] for s in syms if s in data and len(data[s])}
+        if not lasts:
+            continue
+        newest = max(lasts.values())
+        stale += [s for s, t in lasts.items() if t < newest]
+
+    repair = missing + stale
+    if repair:
+        print(f"[repair] ดึงซ้ำทีละตัว {len(repair)} symbols "
+              f"(หลุด {len(missing)} · ล้าหลังกลุ่ม {len(stale)}) ...")
+        fixed = 0
+        for s in repair:
             try:
-                df = yf.download(s, period=f"{HISTORY_DAYS}d", interval="1d",
-                                 auto_adjust=True, progress=False, threads=False)
-                df = df.droplevel(1, axis=1) if hasattr(df.columns, "levels") else df
-                df = _tidy(df)
-                if len(df) >= 60:
-                    df.to_parquet(os.path.join(CACHE, f"{s}.parquet"))
+                df = _download_one(s)
+                if df is not None:
+                    before = data.get(s)
                     data[s] = df
-                    print(f"[retry] {s}: สำเร็จรอบสอง")
+                    if before is None or df.index[-1] > before.index[-1]:
+                        fixed += 1
             except Exception:  # noqa
                 pass
+            time.sleep(REPAIR_SLEEP)
+        print(f"[repair] ซ่อมได้ {fixed}/{len(repair)}")
+
+    # ---- เขียน cache ----
+    for s in to_fetch:
+        if s in data:
+            try:
+                data[s].to_parquet(os.path.join(CACHE, f"{s}.parquet"))
+            except Exception:  # noqa
+                pass
+
+    # ---- รายงานวันสุดท้ายต่อกลุ่ม เพื่อให้เห็นทันทีถ้ามีกลุ่มไหนค้าง ----
+    for g, syms in sorted(groups.items()):
+        lasts = [data[s].index[-1] for s in syms if s in data and len(data[s])]
+        if lasts:
+            mode = collections.Counter(lasts).most_common(1)[0][0]
+            print(f"[fetch] {g:8s} {len(lasts):3d} symbols · แท่งล่าสุดส่วนใหญ่ {mode:%Y-%m-%d}")
+
     return data
 
 
