@@ -12,6 +12,7 @@ import json
 import os
 import re
 import sys
+import time
 import yaml
 import numpy as np
 import pandas as pd
@@ -21,6 +22,7 @@ CACHE = os.path.join(ROOT, "data", "cache")
 os.makedirs(CACHE, exist_ok=True)
 
 HISTORY_DAYS = 400
+CACHE_TTL_HOURS = 6      # cache เก่ากว่านี้ถือว่าหมดอายุ ดึงใหม่
 
 # รหัสดัชนี/FX/commodity ของ TradingView → ticker ของ Yahoo Finance
 TV_TO_YAHOO = {
@@ -131,19 +133,41 @@ def all_symbols(cfg: dict, extra: list[str] | None = None) -> list[str]:
 # ดึงข้อมูลจริงผ่าน yfinance (มี cache รายวัน)
 # ----------------------------------------------------------------
 
+def _tidy(df: pd.DataFrame) -> pd.DataFrame:
+    """คัดแถวเสียโดยดูเฉพาะคอลัมน์ราคา
+
+    เดิมใช้ .dropna() ครอบทั้ง 5 คอลัมน์ ทำให้แท่งล่าสุดหายทั้งแถวเมื่อ Volume
+    ยังเป็น NaN (yfinance ปิด consolidated volume ช้ากว่า OHLC) — เป็นเหตุให้
+    ข้อมูลช้าไปหนึ่งวันทำการพร้อมกันทุก symbol
+    ผลพลอยได้: ดัชนี/ค่าเงินที่ไม่มี Volume จริง (^TNX, THB=X, DX-Y.NYB)
+    จะไม่ถูกตัดทิ้งอีกต่อไป
+    """
+    cols = ["Open", "High", "Low", "Close", "Volume"]
+    for c in cols:
+        if c not in df.columns:
+            df[c] = np.nan
+    df = df[cols].copy()
+    df = df.dropna(subset=["Open", "High", "Low", "Close"])
+    df["Volume"] = pd.to_numeric(df["Volume"], errors="coerce").fillna(0.0)
+    return df
+
+
 def fetch_ohlcv(symbols: list[str], force: bool = False) -> dict[str, pd.DataFrame]:
     import yfinance as yf
 
-    today = pd.Timestamp.today().normalize()
     data = {}
     to_fetch = []
     for s in symbols:
         fp = os.path.join(CACHE, f"{s}.parquet")
+        # เดิมเทียบ (today - แท่งล่าสุด).days <= 1 ซึ่งทำให้ cache ที่มีแท่งเมื่อวาน
+        # ถือว่า "สด" เสมอ แท่งของวันนี้จึงไม่เคยถูกดึง — เปลี่ยนมาใช้อายุไฟล์แทน
         if not force and os.path.exists(fp):
-            df = pd.read_parquet(fp)
-            if len(df) and (today - df.index[-1]).days <= 1:
-                data[s] = df
-                continue
+            age_h = (time.time() - os.path.getmtime(fp)) / 3600.0
+            if age_h <= CACHE_TTL_HOURS:
+                df = pd.read_parquet(fp)
+                if len(df):
+                    data[s] = df
+                    continue
         to_fetch.append(s)
 
     if to_fetch:
@@ -154,7 +178,7 @@ def fetch_ohlcv(symbols: list[str], force: bool = False) -> dict[str, pd.DataFra
         for s in to_fetch:
             try:
                 df = raw[s].dropna(how="all") if len(to_fetch) > 1 else raw.dropna(how="all")
-                df = df[["Open", "High", "Low", "Close", "Volume"]].dropna()
+                df = _tidy(df)
                 if len(df) < 60:
                     print(f"[warn] {s}: ข้อมูลน้อยเกิน ({len(df)} แถว) — ข้าม")
                     continue
@@ -169,7 +193,7 @@ def fetch_ohlcv(symbols: list[str], force: bool = False) -> dict[str, pd.DataFra
                 df = yf.download(s, period=f"{HISTORY_DAYS}d", interval="1d",
                                  auto_adjust=True, progress=False, threads=False)
                 df = df.droplevel(1, axis=1) if hasattr(df.columns, "levels") else df
-                df = df[["Open", "High", "Low", "Close", "Volume"]].dropna()
+                df = _tidy(df)
                 if len(df) >= 60:
                     df.to_parquet(os.path.join(CACHE, f"{s}.parquet"))
                     data[s] = df
