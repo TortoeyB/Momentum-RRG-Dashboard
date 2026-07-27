@@ -1,13 +1,13 @@
 """
 scoring.py — แปลง indicator เป็นคะแนน 0–100 + buy/sell signal
 
-โครงสร้างคะแนน (ตามที่ตกลงกัน):
+โครงสร้างคะแนน:
   sub-score แต่ละตัวอยู่ในช่วง -2..+2
-    MA200  (20%): เหนือ/ใต้เส้น ±1, slope ±1
-    MA50   (20%): เหนือ/ใต้ ±1, slope ±1, ยืดเกิน 12% โดนหักกลับ 1
-    Hull   (25%): HMA9 vs HMA20 ±1, slope HMA9 ±1
-    Cipher (35%): WT cross ±1.5 (จุดเขียว/แดง ภายใน 3 วัน), divergence ±1,
-                  money flow ±0.5, gold buy = เต็ม +2
+    MA200  (20%): เหนือ/ใต้เส้น ±1 (graded ±10%), slope ±1
+    MA50   (20%): เหนือ/ใต้ ±1 (graded ±5%), slope ±1, ยืดเกิน 12% โดนหักกลับ 1
+    Hull   (25%): HMA9 vs HMA20 ±1, ราคาเทียบ HMA9 ±0.5, slope HMA9 ±0.5
+    Cipher (35%): WT cross ±1.5 (ภายใน 3 วัน) | ถ้าไม่มี cross ใช้ spread แบบ graded ±0.5,
+                  divergence ±1, money flow ±0.5, gold buy = เต็ม +2
   raw = ผลรวมถ่วงน้ำหนัก (-2..+2) → base = 50 + raw*25
   ADX คูณส่วนเบี่ยงจาก 50:  >=35 → ×1.25, 20–35 → ×1.0, <20 → ×0.6
 
@@ -18,10 +18,13 @@ Buy checklist (0–10):
   +2 WT ตัดขึ้นในโซน oversold (ภายใน 3 วัน)
   +2 bullish divergence บน WT (ภายใน 5 วัน)
   +1 money flow เขียว
-  (gold buy → หมวด Cipher B ได้เต็ม 5 ทันที)
+  (gold buy → หมวด Cipher B ได้เต็ม 5 ทันที ถ้าแท่งล่าสุดไม่ใช่ hard down)
   >=7 = BUY
   5–6 + โครงสร้างยืนยัน (Higher low/high) + money flow ไม่แดง = ACCUM (ทยอยซื้อ)
   4–6 อื่นๆ = WATCH   |   ฝั่ง SELL ใช้เงื่อนไขกลับด้าน (SELL / REDUCE)
+
+  BAR-LEVEL VETO: ถ้าแท่งล่าสุด "hard down" (ปิด <= -3% และปิดในโซนล่าง 25%
+  ของ range วัน) → บล็อก BUY/ACCUM ทั้งหมด ดาวน์เกรดลงมาเป็น WATCH
 """
 
 import numpy as np
@@ -30,10 +33,42 @@ import pandas as pd
 from indicators import compute_all, slope_up
 
 # ----------------------------------------------------------------
-# คะแนนรายวัน (ทั้ง series เพื่อใช้ลากหาง RRG)
+# ค่าคงที่ปรับจูน (แก้ที่เดียว มีผลทั้งระบบ)
 # ----------------------------------------------------------------
 
 WEIGHTS = {"cipher": 0.35, "hull": 0.25, "ma50": 0.20, "ma200": 0.20}
+
+HARD_DOWN_RET = -0.03   # ผลตอบแทนแท่งเดียวที่ถือว่ารุนแรง
+HARD_DOWN_LOC = 0.25    # ปิดในโซนล่าง x% ของ range วัน (0 = ปิดที่ low พอดี)
+WT_SPREAD_NORM = 5.0    # ตัวหาร normalize spread WT1-WT2 ให้เป็นคะแนน graded
+
+# ----------------------------------------------------------------
+# bar-level shock: มองแท่งล่าสุดตรง ๆ
+# ----------------------------------------------------------------
+
+def bar_shock_series(df: pd.DataFrame) -> pd.DataFrame:
+    """คืน DataFrame: bar_ret, bar_loc, hard_down ต่อวัน
+
+    bar_loc = ตำแหน่งราคาปิดใน range ของวัน (0 = ปิดที่ low, 1 = ปิดที่ high)
+    hard_down = แท่งร่วงแรงและปิดใกล้ low → โครงสร้างระยะสั้นเพิ่งพัง
+    """
+    close = df["Close"].astype(float)
+    high = df["High"].astype(float)
+    low = df["Low"].astype(float)
+
+    rng = (high - low).replace(0, np.nan)
+    bar_ret = close.pct_change()
+    bar_loc = ((close - low) / rng).fillna(0.5).clip(0, 1)
+
+    out = pd.DataFrame(index=df.index)
+    out["bar_ret"] = bar_ret.fillna(0.0)
+    out["bar_loc"] = bar_loc
+    out["hard_down"] = (out["bar_ret"] <= HARD_DOWN_RET) & (out["bar_loc"] <= HARD_DOWN_LOC)
+    return out
+
+# ----------------------------------------------------------------
+# คะแนนรายวัน (ทั้ง series เพื่อใช้ลากหาง RRG)
+# ----------------------------------------------------------------
 
 def score_series(df: pd.DataFrame) -> pd.DataFrame:
     """คืน DataFrame: score, sub-scores, adx_mult ต่อวัน"""
@@ -65,11 +100,23 @@ def score_series(df: pd.DataFrame) -> pd.DataFrame:
     sdiv5 = ind["bear_div"].rolling(5, min_periods=1).max().astype(bool)
     gold5 = ind["gold_buy"].rolling(5, min_periods=1).max().astype(bool)
 
-    cipher_sc = (np.where(buy3, 1.5, np.where(sell3, -1.5,
-                 np.where(ind["wt1"] > ind["wt2"], 0.5, -0.5)))
+    shock = bar_shock_series(df)
+    hard_down = shock["hard_down"].to_numpy()
+
+    # FIX: ตอนไม่มี WT cross เดิมใช้ binary ±0.5 (ไม่สนว่า WT หักหัวลงชันแค่ไหน)
+    #      เปลี่ยนเป็น graded ตาม spread → spread ที่กำลังหุบจะได้คะแนนน้อยลงจริง
+    wt_spread = (ind["wt1"] - ind["wt2"]).to_numpy(dtype=float)
+    neutral_sc = np.clip(wt_spread / WT_SPREAD_NORM, -0.5, 0.5)
+
+    cipher_sc = (np.where(buy3, 1.5, np.where(sell3, -1.5, neutral_sc))
                  + np.where(bdiv5, 1, 0) - np.where(sdiv5, 1, 0)
                  + np.where(ind["mf"] > 0, 0.5, -0.5))
-    cipher_sc = np.where(gold5, 2.0, np.clip(cipher_sc, -2, 2))
+
+    # FIX: gold buy เดิม override เป็น +2 แบบไม่มีเงื่อนไข ทำให้ถ้าเกิด gold buy
+    #      แล้ววันถัดมาร่วงแรง ระบบยังให้ +2 อยู่ → ตอนนี้ยกเลิก override ถ้าแท่ง
+    #      ล่าสุดเป็น hard down
+    gold_ok = gold5.to_numpy() & ~hard_down
+    cipher_sc = np.where(gold_ok, 2.0, np.clip(cipher_sc, -2, 2))
 
     # NaN-safe: ตัด sub ที่เป็น NaN (เช่น MA200 ของหุ้น IPO ใหม่ที่ประวัติ < 200 วัน)
     # ออกจากสมการ แล้ว renormalize น้ำหนักที่เหลือให้รวมเป็น 1
@@ -94,6 +141,10 @@ def score_series(df: pd.DataFrame) -> pd.DataFrame:
     out["ma50_sc"] = ma50_sc
     out["ma200_sc"] = ma200_sc
     out["adx_mult"] = mult
+    # ส่ง bar-level context เข้าไปใน sc เพื่อให้ signal() อ่านได้โดยไม่ต้องรับ df
+    out["bar_ret"] = shock["bar_ret"]
+    out["bar_loc"] = shock["bar_loc"]
+    out["hard_down"] = shock["hard_down"]
     for col in ["wt_buy", "wt_sell", "bull_div", "bear_div", "gold_buy", "mf",
                 "ma50", "ma200", "hma9", "hma20", "doji", "hammer", "shooting_star",
                 "bull_engulf", "bear_engulf", "morning_star", "evening_star", "adx",
@@ -122,12 +173,24 @@ def price_structure(df: pd.DataFrame) -> dict:
     imin = int(np.argmin(lows))
     imax = int(np.argmax(highs))
 
-    if imax >= 8 and lows[5:].min() > lows[:5].min():
+    recent = lows[5:]
+    prev_min = lows[:5].min()
+    # FIX: เดิมเช็คแค่ min(5 แท่งหลัง) > min(5 แท่งแรก) ทำให้ถ้า 5 แท่งแรกมี
+    #      capitulation low ลึก ๆ แท่งไหนก็ตามที่สูงกว่าจะถูกนับเป็น Higher low
+    #      แม้แท่งล่าสุดจะเป็น low ต่ำสุดของ 5 แท่งหลังเองก็ตาม
+    #      เพิ่มเงื่อนไข rising: low ต้องกำลังไต่ขึ้นจริง ไม่ใช่แค่สูงกว่าก้นเก่า
+    #      (แท่งล่าสุดต้องไม่ใช่ก้นของครึ่งหลังเอง)
+    rising = int(np.argmin(recent)) != len(recent) - 1
+
+    if imax >= 8 and recent.min() > prev_min and rising:
         return {"label": "Higher high", "tone": 1, "code": "higher_high"}
     if imin >= 8:
         return {"label": "New 10D low", "tone": 0, "code": "new_low"}
-    if lows[5:].min() > lows[:5].min() * 1.004:
+    if recent.min() > prev_min * 1.004 and rising:
         return {"label": "Higher low", "tone": 1, "code": "higher_low"}
+    if recent.min() > prev_min * 1.004 and not rising:
+        return {"label": "Low ยกตัว แต่แท่งล่าสุดทำ low ใหม่ · รอยืนยัน",
+                "tone": 2, "code": "bounce"}
     if close >= lows[imin] * 1.03:
         return {"label": "เด้งจาก low · รอยืนยัน", "tone": 2, "code": "bounce"}
     return {"label": "Lower low", "tone": 0, "code": "lower_low"}
@@ -217,6 +280,11 @@ def signal(sc: pd.DataFrame, quad_now: str, quad_prev: str,
     sdiv5 = bool(sc["bear_div"].tail(5).any())
     gold5 = bool(sc["gold_buy"].tail(5).any())
 
+    # bar-level veto — อ่านจาก sc (ใส่ไว้ตั้งแต่ score_series)
+    hard_down = bool(last["hard_down"]) if "hard_down" in sc.columns else False
+    bar_ret = float(last["bar_ret"]) if "bar_ret" in sc.columns else 0.0
+    gold_ok = gold5 and not hard_down
+
     # ---------- BUY ----------
     b = []
     fresh_leading = quad_now == "Leading" and quad_prev == "Improving"
@@ -226,7 +294,7 @@ def signal(sc: pd.DataFrame, quad_now: str, quad_prev: str,
               structure["code"] in ("higher_low", "higher_high"), 2))
     b.append((("Pattern: " + pattern["label"]) if (pattern and pattern["tone"] == 1)
               else "ไม่มี bullish pattern", bool(pattern and pattern["tone"] == 1), 1))
-    if gold5:
+    if gold_ok:
         b.append(("GOLD BUY (WT2≤-75 + RSI<30 + divergence)", True, 5))
         b.append(("WT ตัดขึ้นในโซน oversold", wt_buy3, 0))
         b.append(("Money flow เขียว", mf_green, 0))
@@ -234,6 +302,10 @@ def signal(sc: pd.DataFrame, quad_now: str, quad_prev: str,
         b.append(("WT ตัดขึ้นในโซน oversold", wt_buy3, 2))
         b.append(("Bullish divergence บน WT", bdiv5, 2))
         b.append(("Money flow เขียว", mf_green, 1))
+    # แถวโปร่งใส: แต้ม 0 ไม่กระทบคะแนน แต่ผู้ใช้เห็นว่าโดน veto ด้วยเหตุอะไร
+    b.append((f"แท่งล่าสุดไม่ใช่ hard down ({bar_ret:+.1%} ปิดใกล้ low)"
+              if hard_down else "แท่งล่าสุดไม่ใช่ hard down",
+              not hard_down, 0))
     buy_score = sum(p for _, ok, p in b if ok)
 
     # ---------- SELL ----------
@@ -254,12 +326,14 @@ def signal(sc: pd.DataFrame, quad_now: str, quad_prev: str,
         return {"grade": grade, "score": int(score),
                 "checklist": [[t, bool(ok)] for t, ok, _ in items]}
 
-    if buy_score >= 7:
+    # BUY / ACCUM โดนบล็อกถ้าแท่งล่าสุดพังโครงสร้างระยะสั้น
+    if buy_score >= 7 and not hard_down:
         return pack("BUY", min(buy_score, 10), b)
     if sell_score >= 7:
         return pack("SELL", min(sell_score, 10), s)
     if (buy_score >= 5 and buy_score >= sell_score
-            and structure["code"] in ("higher_low", "higher_high") and mf_green):
+            and structure["code"] in ("higher_low", "higher_high")
+            and mf_green and not hard_down):
         return pack("ACCUM", buy_score, b)
     if buy_score >= 4 and buy_score >= sell_score:
         return pack("WATCH", buy_score, b)
