@@ -26,6 +26,7 @@ HISTORY_DAYS = 400
 CACHE_TTL_HOURS = 6      # cache เก่ากว่านี้ถือว่าหมดอายุ ดึงใหม่
 BATCH_SIZE = 40          # ดึงทีละกี่ symbol ต่อคำสั่ง (ก้อนใหญ่ทำให้แท่งล่าสุดหาย)
 REPAIR_SLEEP = 0.15      # หน่วงระหว่างดึงซ้ำทีละตัว กัน Yahoo throttle
+REPAIR_TRIES = 3         # ลองซ้ำกี่ครั้งต่อ symbol ก่อนยอมแพ้ (Yahoo throttle เป็นระยะ)
 
 # รหัสดัชนี/FX/commodity ของ TradingView → ticker ของ Yahoo Finance
 TV_TO_YAHOO = {
@@ -242,32 +243,47 @@ def fetch_ohlcv(symbols: list[str], force: bool = False) -> dict[str, pd.DataFra
                 print(f"[warn] batch {g}[{i}:{i + len(batch)}] ล้มเหลว ({e})")
 
     # ---- ตรวจซ่อม: ตัวที่หลุด + ตัวที่แท่งล่าสุดเก่ากว่าเพื่อนในกลุ่มเดียวกัน ----
+    # ใช้ mode (วันที่พบบ่อยสุด) เป็นตัวอ้างอิง ไม่ใช่ max
+    # เพราะในกลุ่ม us มี ^VIX/^TNX/^TYX/^IRX ที่มีแท่งวันจันทร์ก่อนหุ้นเสมอ
+    # ถ้าใช้ max หุ้นทั้งกระดานจะถูกมองว่า "ล้าหลัง" แล้วโดนดึงซ้ำทุกรอบ
+    # ซึ่งทั้งช้าและทำให้ Yahoo throttle จนเกิด request ล้มเหลวแบบสุ่ม
     missing = [s for s in to_fetch if s not in data]
     stale: list[str] = []
     for g, syms in groups.items():
         lasts = {s: data[s].index[-1] for s in syms if s in data and len(data[s])}
         if not lasts:
             continue
-        newest = max(lasts.values())
-        stale += [s for s, t in lasts.items() if t < newest]
+        ref = collections.Counter(lasts.values()).most_common(1)[0][0]
+        stale += [s for s, t in lasts.items() if t < ref]
 
     repair = missing + stale
     if repair:
         print(f"[repair] ดึงซ้ำทีละตัว {len(repair)} symbols "
               f"(หลุด {len(missing)} · ล้าหลังกลุ่ม {len(stale)}) ...")
-        fixed = 0
+        fixed, failed = 0, []
         for s in repair:
-            try:
-                df = _download_one(s)
-                if df is not None:
-                    before = data.get(s)
-                    data[s] = df
-                    if before is None or df.index[-1] > before.index[-1]:
-                        fixed += 1
-            except Exception:  # noqa
-                pass
+            before = data.get(s)
+            ok = False
+            for attempt in range(1, REPAIR_TRIES + 1):
+                try:
+                    df = _download_one(s)
+                    # อย่าเอาข้อมูลที่เก่ากว่าเดิมมาทับของดี
+                    if df is not None and (before is None or df.index[-1] >= before.index[-1]):
+                        data[s] = df
+                        if before is None or df.index[-1] > before.index[-1]:
+                            fixed += 1
+                        ok = True
+                        break
+                except Exception as e:  # noqa
+                    if attempt == REPAIR_TRIES:
+                        print(f"[repair] {s}: ล้มเหลว {REPAIR_TRIES} ครั้ง ({type(e).__name__}: {e})")
+                time.sleep(REPAIR_SLEEP * (2 ** attempt))   # backoff
+            if not ok:
+                failed.append(s)
             time.sleep(REPAIR_SLEEP)
         print(f"[repair] ซ่อมได้ {fixed}/{len(repair)}")
+        if failed:
+            print(f"[repair] ยังซ่อมไม่ได้ {len(failed)}: {', '.join(sorted(failed))}")
 
     # ---- เขียน cache ----
     for s in to_fetch:
