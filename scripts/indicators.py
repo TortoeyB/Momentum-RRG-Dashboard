@@ -11,6 +11,15 @@ indicators.py — คำนวณ indicator ทั้งหมดจาก OHLCV
 
 DataFrame ต้องมีคอลัมน์: Open, High, Low, Close, Volume (index = วันที่)
 ทุกฟังก์ชันคืน Series/DataFrame ที่ align กับ index เดิม
+
+หมายเหตุการเทียบกับ TradingView
+-------------------------------
+* Hull ribbon ของ "Hull Suite" บน TradingView ระบายสีจาก HMA(n) เทียบ HMA(n)[2]
+  (คือ slope ของเส้นเดียว, default n=55) ไม่ใช่ HMA9 เทียบ HMA20
+  ดังนั้น ribbon แดง != hma9 < hma20 — เป็นคนละตัววัด อย่าใช้เทียบกันตรง ๆ
+* WT buy/sell circle ต้องการ wt2 <= -53 / >= +53 ซึ่งเป็นเกณฑ์ที่ "ลึก" มาก
+  สินทรัพย์ที่ WT2 แกว่งแคบอาจไม่เคยยิงสัญญาณเลย ใช้ tools/diagnose.py
+  ตรวจ distribution ของ WT2 ก่อนปรับค่า
 """
 
 import numpy as np
@@ -19,6 +28,15 @@ import pandas as pd
 # ----------------------------------------------------------------
 # helpers
 # ----------------------------------------------------------------
+
+def _pine_round(x: float) -> int:
+    """ปัดแบบ Pine Script (half away from zero)
+
+    ระวัง: Python round() ใช้ banker's rounding — round(4.5) = 4 ไม่ใช่ 5
+    ส่วน int() ตัดทศนิยมทิ้ง — int(4.5) = 4 เช่นกัน
+    ทำให้ HMA9 เดิมใช้ WMA(4) ขณะที่ Pine ใช้ WMA(5)
+    """
+    return int(np.floor(float(x) + 0.5))
 
 def ema(s: pd.Series, n: int) -> pd.Series:
     return s.ewm(span=n, adjust=False).mean()
@@ -47,10 +65,16 @@ def slope_up(s: pd.Series, lookback: int = 3) -> pd.Series:
 # Moving averages
 # ----------------------------------------------------------------
 
+HULL_PINE_ROUND = True   # True = ตรงกับ TradingView, False = พฤติกรรมเดิม
+
 def hull(s: pd.Series, n: int) -> pd.Series:
-    """Hull Moving Average"""
-    half = max(int(n / 2), 1)
-    sq = max(int(np.sqrt(n)), 1)
+    """Hull Moving Average = WMA(2*WMA(n/2) - WMA(n), sqrt(n))"""
+    if HULL_PINE_ROUND:
+        half = max(_pine_round(n / 2), 1)
+        sq = max(_pine_round(np.sqrt(n)), 1)
+    else:
+        half = max(int(n / 2), 1)
+        sq = max(int(np.sqrt(n)), 1)
     return wma(2 * wma(s, half) - wma(s, n), sq)
 
 # ----------------------------------------------------------------
@@ -58,11 +82,18 @@ def hull(s: pd.Series, n: int) -> pd.Series:
 # ----------------------------------------------------------------
 
 def rsi(close: pd.Series, n: int = 14) -> pd.Series:
+    """FIX: เดิม dn == 0 (ไม่มีแท่งลงเลย) ทำให้ rs = NaN แล้ว fillna(50)
+    ซึ่งผิด — ควรเป็น 100 กรณีนี้จะเกิดกับหุ้นที่วิ่งขึ้นรวดเดียว
+    """
     diff = close.diff()
     up = rma(diff.clip(lower=0), n)
     dn = rma((-diff).clip(lower=0), n)
+
     rs = up / dn.replace(0, np.nan)
-    return (100 - 100 / (1 + rs)).fillna(50)
+    out = 100 - 100 / (1 + rs)
+    out = out.where(~((dn == 0) & (up > 0)), 100.0)   # ขึ้นล้วน -> 100
+    out = out.where(~((dn == 0) & (up == 0)), 50.0)   # นิ่งสนิท -> 50
+    return out.fillna(50)
 
 # ----------------------------------------------------------------
 # ADX (14, 14) — Wilder
@@ -95,9 +126,11 @@ def adx(df: pd.DataFrame, di_len: int = 14, adx_len: int = 14) -> pd.DataFrame:
 #          wt2 = sma(wt1, malen=3)
 # ----------------------------------------------------------------
 
-WT_OS = -53      # oversold
-WT_OB = 53       # overbought
+WT_OS = -53      # oversold — เกณฑ์จุดเขียว
+WT_OB = 53       # overbought — เกณฑ์จุดแดง
 WT_GOLD = -75    # โซน gold buy
+DIV_OS = -40     # โซนที่ยอมรับ bullish divergence
+DIV_OB = 40      # โซนที่ยอมรับ bearish divergence
 
 def wavetrend(df: pd.DataFrame, chlen: int = 9, avg: int = 12, malen: int = 3) -> pd.DataFrame:
     ap = (df["High"] + df["Low"] + df["Close"]) / 3.0
@@ -115,7 +148,11 @@ def wavetrend(df: pd.DataFrame, chlen: int = 9, avg: int = 12, malen: int = 3) -
     return out
 
 def money_flow(df: pd.DataFrame, period: int = 60, mult: float = 150.0) -> pd.Series:
-    """VMC f_rsimfi — คลื่น money flow เขียว/แดง (>0 = เขียว)"""
+    """VMC f_rsimfi — คลื่น money flow เขียว/แดง (>0 = เขียว)
+
+    ระวัง: เป็น SMA 60 วันของตำแหน่งราคาปิดในแท่ง → เป็น "regime flag ~3 เดือน"
+    ไม่ใช่ flow ปัจจุบัน แท่งเดียวแทบไม่ขยับค่านี้เลย
+    """
     rng = (df["High"] - df["Low"]).replace(0, np.nan)
     raw = ((df["Close"] - df["Open"]) / rng) * mult
     return sma(raw.fillna(0), period)
@@ -141,7 +178,7 @@ def _pivots(s: pd.Series, left: int = 2, right: int = 2, low: bool = True):
     return piv
 
 def divergences(df: pd.DataFrame, wt2: pd.Series,
-                os_zone: float = -40, ob_zone: float = 40,
+                os_zone: float = DIV_OS, ob_zone: float = DIV_OB,
                 max_gap: int = 40) -> pd.DataFrame:
     """Regular bullish/bearish divergence บน WT2 เทียบราคา
     bullish: ราคาทำ low ต่ำกว่า แต่ WT2 ยก low (ทั้งคู่ในโซนล่าง)
