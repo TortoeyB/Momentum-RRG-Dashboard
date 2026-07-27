@@ -36,9 +36,12 @@ jobs:
         run: python -m compileall -q scripts
 
       - name: Run diagnose
+        shell: bash
         env:
           DIAGNOSE_PERIOD: ${{ inputs.period }}
-        run: python scripts/diagnose.py ${{ inputs.symbols }} | tee diagnose_output.txt
+        run: |
+          set -o pipefail
+          python scripts/diagnose.py ${{ inputs.symbols }} 2>&1 | tee diagnose_output.txt
 
       - name: Upload report
         if: always()
