@@ -11,6 +11,7 @@ run_daily.py — รันทีเดียวจบ: ดึงข้อมู�
     backup/data_YYYY-MM-DD.json            # สำเนารายวัน (sync ขึ้น Drive ได้)
 """
 
+import collections
 import json
 import os
 import shutil
@@ -146,7 +147,21 @@ def main():
                         for s in (t["etfs"] + t["stocks"]) if s in scores],
         })
 
-    as_of = max(df.index[-1] for df in data.values()).strftime("%Y-%m-%d")
+    # as_of ต้องเป็นวันของ "ข้อมูลส่วนใหญ่" ไม่ใช่ max()
+    # เพราะคริปโต/futures/FX/ดัชนีเอเชีย เดินวันเสาร์อาทิตย์และเร็วกว่าตลาด US
+    # ทำให้ max() ลากวันที่ไปข้างหน้า หน้าจอจึงขึ้นวันที่ใหม่ทั้งที่ข้อมูลค้าง
+    _lasts = [df.index[-1] for df in data.values() if len(df)]
+    _mode = collections.Counter(_lasts).most_common(1)[0][0]
+    as_of = _mode.strftime("%Y-%m-%d")
+    _mx = max(_lasts)
+    if _mx.normalize() > _mode.normalize():
+        _ahead = sum(1 for x in _lasts if x.normalize() > _mode.normalize())
+        print(f"[info] as_of={as_of} (จาก {sum(1 for x in _lasts if x.normalize()==_mode.normalize())} symbols) "
+              f"· อีก {_ahead} ตัวถึง {_mx:%Y-%m-%d} แล้ว (คริปโต/FX/เอเชีย)")
+    _lag = len(pd.bdate_range(_mode.normalize(), pd.Timestamp.today().normalize())) - 1
+    if _lag >= 2:
+        print(f"[WARN] ข้อมูลช้า {_lag} วันทำการ — แท่งล่าสุดคือ {as_of} "
+              f"แต่วันนี้คือ {pd.Timestamp.today():%Y-%m-%d}")
     watchlists_out = []
     for k, v in wl.items():
         payload_syms = [symbol_payload(x, scores[x], data[x], names.get(x, ""))
