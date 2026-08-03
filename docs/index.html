@@ -23,6 +23,8 @@ h1{font-size:23px;font-weight:600}
 h1 .dot{color:var(--accent)}
 .asof{color:var(--ink3);font-size:13.5px}
 .badge-demo{font-size:11px;color:#000;background:var(--gold);border-radius:4px;padding:1px 8px;font-weight:600}
+.dq{font-size:10px;font-weight:700;border-radius:4px;padding:1px 5px;margin-left:5px;cursor:help;vertical-align:middle}
+.dq-bad{color:#000;background:#f87171}.dq-warn{color:#000;background:#fbbf24}
 h2{font-size:16px;font-weight:600;color:var(--accent);margin:26px 0 10px;
   display:flex;align-items:center;gap:8px}
 h2 .sub{color:var(--ink3);font-weight:400;font-size:13px}
@@ -283,7 +285,8 @@ function baseRows(){
   const w=(D.watchlists||[]).find(w=>w.name===tab);
   return w?w.symbols.map(s=>({name:s.sym,fullname:s.name,group:'',etf:'',symbols:[],
     score_hist:s.score_hist,score_dates:s.score_dates,sub:s.sub,adx_mult:s.adx_mult,
-    px_hist:s.px_hist,chg:s.chg,structure:s.structure,pattern:s.pattern,signal:s.signal})):[];
+    px_hist:s.px_hist,chg:s.chg,structure:s.structure,pattern:s.pattern,signal:s.signal,
+    quality:s.quality})):[];
 }
 function themes(){
   let r=baseRows();
@@ -337,13 +340,14 @@ function render(){const rows=themes().map(rowOf);renderCards(rows);renderChart(r
 
 function renderCards(rows){
   const el=document.getElementById('cards');el.innerHTML='';
-  const list=rows.filter(r=>r.t.signal&&r.t.signal.score>=4)
+  const list=rows.filter(r=>r.t.signal&&r.t.signal.score>=4&&
+      !(r.t.quality&&r.t.quality.status==='bad'))
     .sort((a,b)=>b.t.signal.score-a.t.signal.score).slice(0,4);
   if(!list.length){el.innerHTML='<div class="setup mut">ไม่มี setup ที่เข้าเกณฑ์ ≥4/10 ใน tab นี้ — ไม่มีอะไรให้ทำก็คือสถานะที่ถูกต้อง</div>';return;}
   list.forEach(r=>{const t=r.t,g=t.signal;
     el.insertAdjacentHTML('beforeend',`<div class="setup">
       <div class="head"><span class="name">${t.name}${t.fullname?' <span class="mut" style="font-weight:400;font-size:12px">'+t.fullname+'</span>':''}</span>
-      <span class="pill s-${g.grade}">${g.grade} ${g.score}/10${g.days!==undefined?' · '+(g.days===0?'วันนี้':'ตั้งแต่ '+g.since):''}</span></div>
+      <span class="pill s-${g.grade}">${g.grade} ${g.score}/10${g.days!==undefined?' · '+(g.days===0?'วันนี้':'ตั้งแต่ '+g.since):''}</span>${dqBadge(t.quality)}</div>
       ${g.checklist.map(([txt,ok])=>`<div class="chk ${ok?'':'off'}">
         <span class="ic" style="color:${ok?'var(--lead)':'var(--ink3)'}">${ok?'✓':'–'}</span><span>${txt}</span></div>`).join('')}
     </div>`);});
@@ -411,6 +415,13 @@ function renderChart(rows){
     lg.appendChild(c);});
 }
 
+// ป้ายเตือนคุณภาพข้อมูล — ราคาที่มีรอยต่อ split ทำให้ indicator ทุกตัวเพี้ยน
+// จงใจให้เห็นชัดแทนที่จะซ่อน symbol ทิ้ง จะได้รู้ว่าอะไรหายไปจากจอและเพราะอะไร
+function dqBadge(q){if(!q||!q.status||q.status==='ok')return'';
+  const tip=(q.reasons||[]).join(' · ').replace(/"/g,'&quot;');
+  const lbl=q.status==='bad'?'ข้อมูลผิด':'ข้อมูลน่าสงสัย';
+  return`<span class="dq dq-${q.status}" data-tip="${tip}">⚠ ${lbl}</span>`;}
+
 function sigPill(g){if(!g)return'<span class="mut">–</span>';
   const age=g.days!==undefined?` · ${g.days===0?'วันนี้':g.days+'d'}`:'';
   const tip=g.since?` data-tip="ให้สัญญาณ ${g.grade} ตั้งแต่ ${g.since}${g.days?` (${g.days} วันก่อน)`:' (วันนี้)'}"`:'';
@@ -431,7 +442,7 @@ function renderTables(rows){
       <td class="mono dbar" style="font-weight:600">${bar(r.x,100,'#22c55e')}${Math.round(r.x)}</td>
       <td class="mono dbar ${r.y>=0?'pos':'neg'}">${bar(r.y,20,r.y>=0?'#22c55e':'#ef4444')}${r.y>=0?'+':''}${Math.round(r.y)}</td>
       <td class="l"><span class="pill q-${r.q}">${r.q}</span></td>
-      <td class="l">${sigPill(t.signal)}</td></tr>`);
+      <td class="l">${sigPill(t.signal)}${dqBadge(t.quality)}</td></tr>`);
     (t.symbols||[]).forEach(s=>{const sb=s.sub||{};const tip=('<b>'+s.sym+'</b>'+(s.name?' — '+s.name:'')+'<br>'+s.structure.label+(s.pattern?' · '+s.pattern.label:'')).replace(/"/g,'&quot;');
       t1.insertAdjacentHTML('beforeend',`<tr class="member" data-p="${i}" hidden>
       <td class="l" data-tip="${tip}"><div class="symwrap ellip"><span class="mono">${s.sym}</span>${s.name?`<span class="nm ellip">${s.name}</span>`:''}</div></td>
@@ -441,7 +452,7 @@ function renderTables(rows){
       <td class="mono">${Math.round(s.score)}</td>
       <td class="mono ${s.delta5>=0?'pos':'neg'}">${s.delta5>=0?'+':''}${Math.round(s.delta5)}</td>
       <td class="l"><span class="pill q-${s.quadrant}">${s.quadrant}</span></td>
-      <td class="l">${sigPill(s.signal)}</td></tr>`);});
+      <td class="l">${sigPill(s.signal)}${dqBadge(s.quality)}</td></tr>`);});
   });
   t1.querySelectorAll('tr.theme').forEach(tr=>{
     tr.onclick=()=>{t1.querySelectorAll(`tr.member[data-p="${tr.dataset.i}"]`).forEach(m=>m.hidden=!m.hidden);};
