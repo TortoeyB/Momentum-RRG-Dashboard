@@ -22,6 +22,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fetch_data import ROOT, load_themes, get_data, load_watchlists, load_names
+from data_quality import audit
 from scoring import score_series, quadrant, price_structure, significant_pattern, signal, signal_with_age
 import math
 
@@ -47,12 +48,26 @@ def pct_change(px: pd.Series, d: int) -> float:
     return round(float(px.iloc[-1] / px.iloc[-1 - d] - 1) * 100, 2)
 
 
-def symbol_payload(sym: str, sc: pd.DataFrame, df: pd.DataFrame, name: str = "") -> dict:
+def demote(sig: dict | None, q: dict | None) -> dict | None:
+    """ข้อมูลเชื่อไม่ได้ = ไม่มีสัญญาณ ไม่ใช่สัญญาณอ่อน
+
+    กด grade ลง HOLD 0/10 เพื่อให้หลุดจากการ์ด "Setup เด่นวันนี้" (กรอง >=4)
+    แต่ยังคง object ไว้ ไม่ลบทิ้ง — หน้าเว็บจะได้ขึ้นป้ายเตือนแทนช่องว่าง
+    """
+    if not sig or not q or q.get("status") != "bad":
+        return sig
+    return {"grade": "HOLD", "score": 0, "checklist": []}
+
+
+def symbol_payload(sym: str, sc: pd.DataFrame, df: pd.DataFrame, name: str = "",
+                   q: dict | None = None) -> dict:
     s = sc["score"]
     d5 = float(s.iloc[-1] - s.iloc[-6]) if len(s) > 5 else 0.0
     sig, struct, patt, q_now, q_prev = signal_with_age(sc, df, s)
+    sig = demote(sig, q)
     last = sc.iloc[-1]
     return {
+        **({"quality": q} if q else {}),
         "sym": sym,
         "name": name,
         "score_hist": [round(float(v), 1) for v in s.tail(HIST_LEN)],
@@ -84,6 +99,10 @@ def main():
 
     if not data:
         raise SystemExit("ไม่มีข้อมูลราคาเลย — ตรวจการเชื่อมต่อ/รายชื่อ symbol")
+
+    # ตรวจ+ซ่อม split ที่ Yahoo ไม่ได้ adjust ก่อนคำนวณ indicator
+    # ต้องอยู่ก่อน score_series เสมอ ไม่งั้น MA/HMA/WT พาดข้ามรอยต่อไปแล้ว
+    data, quality = audit(data, demo=demo)
 
     names = load_names(list(data.keys()), demo=demo)
 
@@ -126,6 +145,7 @@ def main():
         ref_df, ref_sc = data[ref], scores[ref]
         # signal ระดับธีม: quadrant จากคะแนนธีม, price action/Cipher จาก ETF อ้างอิง
         sig, struct, patt, _, _ = signal_with_age(ref_sc, ref_df, th_score)
+        sig = demote(sig, quality.get(ref))
 
         px = ref_df["Close"].tail(PX_LEN)
         themes_out.append({
@@ -143,7 +163,9 @@ def main():
             "pattern": patt,
             "signal": sig,
             "quadrant": q_now,
-            "symbols": [symbol_payload(s, scores[s], data[s], names.get(s, ""))
+            **({"quality": quality[ref]} if ref in quality else {}),
+            "symbols": [symbol_payload(s, scores[s], data[s], names.get(s, ""),
+                                       quality.get(s))
                         for s in (t["etfs"] + t["stocks"]) if s in scores],
         })
 
@@ -164,13 +186,16 @@ def main():
               f"แต่วันนี้คือ {pd.Timestamp.today():%Y-%m-%d}")
     watchlists_out = []
     for k, v in wl.items():
-        payload_syms = [symbol_payload(x, scores[x], data[x], names.get(x, ""))
+        payload_syms = [symbol_payload(x, scores[x], data[x], names.get(x, ""),
+                                       quality.get(x))
                         for x in v if x in scores]
         if payload_syms:
             watchlists_out.append({"name": k, "symbols": payload_syms})
         else:
             print(f"[warn] ลิสต์ {k}: ไม่มี symbol ที่ดึงข้อมูลได้เลย — ไม่สร้าง tab")
+    n_bad = sum(1 for q in quality.values() if q.get("status") == "bad")
     payload = {"as_of": as_of, "demo": demo, "tail_len": TAIL_LEN,
+               "quality_bad": n_bad, "quality_flagged": len(quality),
                "themes": themes_out, "watchlists": watchlists_out}
 
     out = os.path.join(ROOT, "docs", "data.json")
