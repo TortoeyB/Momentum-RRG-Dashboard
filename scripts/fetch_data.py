@@ -40,7 +40,7 @@ TV_TO_YAHOO = {
     "USDTHB": "THB=X", "JPYTHB": "JPYTHB=X", "EURTHB": "EURTHB=X",
     "DXY": "DX-Y.NYB",
     # bond yield (Yahoo คูณ 10 เช่น ^TNX = 10Y yield x10)
-    "US10Y": "^TNX", "US30Y": "^TYX", "US02Y": "^IRX",
+    "US10Y": "^TNX", "US30Y": "^TYX", "US02Y": "^IRX", "US05Y": "^FVX",
     # commodity futures
     "USOIL": "CL=F", "BRENT": "BZ=F", "COPPER": "HG=F", "SILVER": "SI=F",
     "GOLD": "GC=F", "NATGAS": "NG=F",
@@ -57,13 +57,42 @@ NAME_OVERRIDES = {
     "THB=X": "USD/THB", "JPYTHB=X": "JPY/THB", "EURTHB=X": "EUR/THB",
     "DX-Y.NYB": "US Dollar Index (DXY)", "^TNX": "US 10Y Yield (x10)",
     "^TYX": "US 30Y Yield (x10)", "^IRX": "US 13W Yield",
+    "^FVX": "US 5Y Yield (x10)",
     "CL=F": "WTI Crude Oil", "BZ=F": "Brent Crude Oil", "HG=F": "Copper Futures",
     "SI=F": "Silver Futures", "GC=F": "Gold Futures", "NG=F": "Natural Gas",
     "BTC-USD": "Bitcoin", "ETH-USD": "Ethereum",
 }
 # รหัสที่รู้ว่า Yahoo ไม่มีแน่ๆ — ข้ามเงียบๆ ไม่ต้องพยายามดึง
-TV_SKIP = {"SET", "SET50", "TOPIX", "VNINDEX", "VN30", "SILV", "ISAG",
-           "CNYTHB", "3032"}
+# SILV/ISAG ถูกถอดออกจากลิสต์นี้แล้ว — เดิมดึงไม่ได้เพราะ prefix LSE โดนตัดทิ้ง
+# ตอนนี้แมปเป็น SILV.L / ISAG.L ได้ตรงตัว
+TV_SKIP = {"SET", "SET50", "TOPIX", "VNINDEX", "VN30", "CNYTHB", "3032"}
+
+# prefix ตลาดของ TradingView → suffix ของ Yahoo
+#
+# เดิมโค้ดตัด prefix ทิ้งทุกตลาดยกเว้น SET: ทำให้ ticker ที่ซ้ำกันข้ามตลาด
+# ถูก resolve ผิดตัวแบบเงียบๆ — เคสจริง: LSE:DFNS (VanEck Defense UCITS ETF)
+# กลายเป็น DFNS เปล่าๆ ซึ่ง Yahoo คืนหุ้น T3 Defense Inc. บน NASDAQ แทน
+# แล้วหุ้นตัวนั้นทำ reverse split 1:125 พอดี คะแนนทั้งแถบจึงเพี้ยน
+#
+# ตลาด US ไม่ต้องมี suffix — ใส่ไว้ในเซ็ตแยกเพื่อให้ "รู้จัก" ไม่ใช่ "ไม่รู้จัก"
+EXCHANGE_SUFFIX = {
+    "LSE": ".L", "LON": ".L",
+    "XETR": ".DE", "FWB": ".DE", "GETTEX": ".DE", "TRADEGATE": ".DE",
+    "EURONEXT": ".AS", "AMS": ".AS", "EPA": ".PA", "MIL": ".MI", "BME": ".MC",
+    "SIX": ".SW", "OMXSTO": ".ST", "OMXCOP": ".CO", "OSL": ".OL",
+    "TSX": ".TO", "TSXV": ".V",
+    "TSE": ".T", "TYO": ".T",
+    "HKEX": ".HK", "SEHK": ".HK",
+    "SSE": ".SS", "SZSE": ".SZ",
+    "KRX": ".KS", "KOSDAQ": ".KQ",
+    "NSE": ".NS", "BSE": ".BO",
+    "ASX": ".AX",
+    "SET": ".BK",
+}
+US_EXCHANGES = {"NASDAQ", "NYSE", "AMEX", "ARCA", "NYSEARCA", "BATS", "CBOE",
+                "OTC", "US", "PINK"}
+# ตลาดอนุพันธ์/ผู้ให้ข้อมูลที่ Yahoo ไม่มีสัญลักษณ์ตรงกัน — ข้ามเงียบๆ
+SKIP_EXCHANGES = {"TFEX", "SPCFD", "CME", "CBOT", "COMEX", "NYMEX", "ICE"}
   # ปฏิทิน ~ 270+ วันทำการ (พอสำหรับ MA200 + buffer)
 
 
@@ -88,14 +117,24 @@ def parse_tv_watchlist(path: str) -> list[str]:
         tok = tok.strip()
         if not tok or tok.startswith("#"):
             continue
+        if "/" in tok:      # กราฟอัตราส่วนของ TradingView เช่น SPCFD:SPX/AMEX:IWM
+            continue        # ไม่ใช่หลักทรัพย์เดี่ยว — เดิมกลายเป็น IWM เปล่าเงียบๆ
         parts = [x.strip().upper() for x in tok.split(":")]
         sym, ex = parts[-1], (parts[0] if len(parts) > 1 else "")
+        if ex in SKIP_EXCHANGES:    # ตลาดอนุพันธ์ — Yahoo ไม่มี ไม่ต้องเตือนซ้ำ
+            continue
         if sym in TV_SKIP or re.fullmatch(r"S50[A-Z]\d{4}", sym):  # ดัชนี/futures ไทย ฯลฯ
             continue
-        if sym in TV_TO_YAHOO:
+        if sym in TV_TO_YAHOO:          # ดัชนี/FX/commodity — แมปตรงตัว ไม่สนตลาด
             sym = TV_TO_YAHOO[sym]
-        elif ex == "SET" and not sym.endswith(".BK"):   # หุ้น/DR ตลาดไทย → suffix ของ Yahoo
-            sym += ".BK"
+        elif ex in EXCHANGE_SUFFIX:     # ตลาดต่างประเทศ — ต้องมี suffix ไม่งั้นได้ผิดตัว
+            suf = EXCHANGE_SUFFIX[ex]
+            if not sym.endswith(suf):
+                sym += suf
+        elif ex and ex not in US_EXCHANGES:
+            # prefix แปลกใหม่ที่ยังไม่รู้จัก — เตือนไว้ ดีกว่าปล่อยให้ resolve ผิดเงียบๆ
+            print(f"[watchlist] ไม่รู้จักตลาด '{ex}' ของ {ex}:{sym} — "
+                  f"ใช้ ticker เปล่า (อาจได้หลักทรัพย์ผิดตัว)")
         if re.fullmatch(r"[A-Z0-9.^=\-]{1,12}", sym):
             out.append(sym)
     return sorted(set(out))
@@ -179,14 +218,37 @@ def _calendar_group(sym: str) -> str:
     return "us"
 
 
-def _download_batch(syms: list[str]) -> dict[str, pd.DataFrame]:
-    """ดึงเป็นก้อนเล็ก — คืนเฉพาะตัวที่ได้ข้อมูลพอ"""
+_REPAIR_OK = True   # ปิดอัตโนมัติถ้า yfinance ที่ติดตั้งไม่รู้จัก kwarg นี้
+
+
+def _yf_download(*args, **kw):
+    """เรียก yf.download พร้อม repair=True
+
+    repair แก้ค่าผิดพลาดที่ฝั่ง Yahoo โดยตรง — split/dividend ที่ adjust ไม่ครบ
+    และ "100x error" (ราคาสลับหน่วยเพนนี/ปอนด์ ซึ่งเจอบ่อยกับ ticker .L)
+    ถ้า yfinance เวอร์ชันเก่าไม่รู้จัก จะถอยไปเรียกแบบเดิมและจำไว้ ไม่ลองซ้ำ
+    """
+    global _REPAIR_OK
     import yfinance as yf
 
+    if _REPAIR_OK:
+        try:
+            return yf.download(*args, repair=True, **kw)
+        except TypeError as e:
+            if "repair" not in str(e):
+                raise
+            _REPAIR_OK = False
+            print("[fetch] yfinance ไม่รองรับ repair=True — ใช้โหมดปกติแทน "
+                  "(แนะนำอัปเกรด yfinance)")
+    return yf.download(*args, **kw)
+
+
+def _download_batch(syms: list[str]) -> dict[str, pd.DataFrame]:
+    """ดึงเป็นก้อนเล็ก — คืนเฉพาะตัวที่ได้ข้อมูลพอ"""
     out: dict[str, pd.DataFrame] = {}
-    raw = yf.download(syms, period=f"{HISTORY_DAYS}d", interval="1d",
-                      group_by="ticker", auto_adjust=True, progress=False,
-                      threads=True)
+    raw = _yf_download(syms, period=f"{HISTORY_DAYS}d", interval="1d",
+                       group_by="ticker", auto_adjust=True, progress=False,
+                       threads=True)
     for s in syms:
         try:
             df = raw[s].dropna(how="all") if len(syms) > 1 else raw.dropna(how="all")
@@ -200,10 +262,8 @@ def _download_batch(syms: list[str]) -> dict[str, pd.DataFrame]:
 
 def _download_one(sym: str) -> pd.DataFrame | None:
     """ดึงทีละตัว — ไม่มีการ align ข้ามปฏิทิน จึงได้แท่งล่าสุดครบเสมอ"""
-    import yfinance as yf
-
-    df = yf.download(sym, period=f"{HISTORY_DAYS}d", interval="1d",
-                     auto_adjust=True, progress=False, threads=False)
+    df = _yf_download(sym, period=f"{HISTORY_DAYS}d", interval="1d",
+                      auto_adjust=True, progress=False, threads=False)
     df = df.droplevel(1, axis=1) if hasattr(df.columns, "levels") else df
     df = _tidy(df)
     return df if len(df) >= 60 else None
