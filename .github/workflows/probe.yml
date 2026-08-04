@@ -1,0 +1,45 @@
+name: Probe Yahoo
+
+# รันมือจากหน้า Actions เท่านั้น — ไม่แตะ data.json ไม่ commit อะไรทั้งสิ้น
+on:
+  workflow_dispatch:
+    inputs:
+      symbols:
+        description: 'สัญลักษณ์ที่ต้องการตรวจ (คั่นด้วยเว้นวรรค)'
+        required: false
+        default: 'AAPL SPY BTC-USD ^GSPC'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONUNBUFFERED: "1"    # กัน stdout/stderr สลับลำดับใน log
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install deps
+        run: pip install -r requirements.txt requests
+
+      - name: Show installed versions
+        run: pip show yfinance | head -3
+
+      - name: Run probe
+        shell: bash
+        run: |
+          set -o pipefail
+          python scripts/probe_yahoo.py ${{ inputs.symbols }} 2>&1 | tee probe_output.txt
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: probe-report
+          path: probe_output.txt
+          retention-days: 14
