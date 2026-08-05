@@ -218,7 +218,7 @@ def _calendar_group(sym: str) -> str:
     return "us"
 
 
-_REPAIR_OK = True   # ปิดอัตโนมัติถ้า yfinance ที่ติดตั้งไม่รู้จัก kwarg นี้
+_REPAIR_OK = True   # ปิดอัตโนมัติถ้า repair ใช้การไม่ได้ในสภาพแวดล้อมนี้
 
 
 def _yf_download(*args, **kw):
@@ -226,20 +226,35 @@ def _yf_download(*args, **kw):
 
     repair แก้ค่าผิดพลาดที่ฝั่ง Yahoo โดยตรง — split/dividend ที่ adjust ไม่ครบ
     และ "100x error" (ราคาสลับหน่วยเพนนี/ปอนด์ ซึ่งเจอบ่อยกับ ticker .L)
-    ถ้า yfinance เวอร์ชันเก่าไม่รู้จัก จะถอยไปเรียกแบบเดิมและจำไว้ ไม่ลองซ้ำ
+
+    2026-08-05: เดิมดักแค่ TypeError (yfinance เก่าไม่รู้จัก kwarg) ซึ่งไม่พอ
+    ถ้า scipy หายไป yfinance จะกลืน ModuleNotFoundError ไว้เองแล้วคืน
+    DataFrame ว่างมาแทน ไม่ raise อะไรเลย fallback เดิมจึงไม่เคยทำงาน
+    ข้อมูลถูกโยนทิ้งเงียบๆ ทั้ง 270 symbol และ pipeline ตายไป 5 วัน
+    ตอนนี้เช็คผลลัพธ์ว่าง แล้วลองใหม่แบบไม่ repair ก่อนยอมแพ้
     """
     global _REPAIR_OK
     import yfinance as yf
 
     if _REPAIR_OK:
         try:
-            return yf.download(*args, repair=True, **kw)
+            out = yf.download(*args, repair=True, **kw)
+            if out is not None and len(out):
+                return out
+            # ว่าง — อาจเป็นเพราะ repair พังเงียบ ลองใหม่แบบปกติเพื่อพิสูจน์
+            plain = yf.download(*args, **kw)
+            if plain is not None and len(plain):
+                _REPAIR_OK = False
+                print("[fetch] repair=True คืนค่าว่างแต่โหมดปกติได้ข้อมูล — "
+                      "ปิด repair ทั้งรอบนี้ (เช็คว่าติดตั้ง scipy ครบหรือยัง)")
+            return plain
         except TypeError as e:
             if "repair" not in str(e):
                 raise
             _REPAIR_OK = False
             print("[fetch] yfinance ไม่รองรับ repair=True — ใช้โหมดปกติแทน "
                   "(แนะนำอัปเกรด yfinance)")
+
     return yf.download(*args, **kw)
 
 
