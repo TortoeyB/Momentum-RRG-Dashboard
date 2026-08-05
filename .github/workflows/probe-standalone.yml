@@ -1,0 +1,123 @@
+name: Probe Yahoo
+
+# รันมือจากหน้า Actions เท่านั้น — ไม่แตะ data.json ไม่ commit อะไรทั้งสิ้น
+# ไฟล์เดียวจบ ไม่ต้องอัปโหลดสคริปต์แยก
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONUNBUFFERED: "1"     # กัน stdout/stderr สลับลำดับใน log
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install deps
+        run: pip install -r requirements.txt requests
+
+      - name: Version
+        run: python -c "import yfinance,pandas;print('yfinance',yfinance.__version__,'| pandas',pandas.__version__)"
+
+      - name: Probe
+        shell: bash
+        run: |
+          set -o pipefail
+          python - <<'PY' 2>&1 | tee probe_output.txt
+          import traceback
+          import numpy as np, pandas as pd, requests, yfinance as yf
+
+          pd.set_option("display.width", 200)
+          SYMS = ["AAPL", "SPY", "BTC-USD", "^GSPC"]
+
+          def hr(t):
+              print("\n" + "="*68 + "\n" + t + "\n" + "="*68)
+
+          # --- 1) HTTP ดิบ: ตอบว่าเข้าถึง Yahoo ได้ไหม และ close เป็น null ไหม
+          hr("1) RAW HTTP -> query1.finance.yahoo.com")
+          try:
+              r = requests.get(
+                  "https://query1.finance.yahoo.com/v8/finance/chart/AAPL"
+                  "?range=1mo&interval=1d",
+                  timeout=30, headers={"User-Agent": "Mozilla/5.0"})
+              print("status:", r.status_code, "| bytes:", len(r.content))
+              if r.status_code == 200:
+                  res = (r.json().get("chart") or {}).get("result") or []
+                  if res:
+                      q = res[0]["indicators"]["quote"][0]
+                      cl = q.get("close") or []
+                      print(f"close: {len(cl)} ค่า · null {sum(c is None for c in cl)} ค่า")
+                      print("5 ตัวท้าย:", cl[-5:])
+                  else:
+                      print("ไม่มี result:", str(r.json())[:300])
+              else:
+                  print("body:", r.text[:300])
+          except Exception:
+              traceback.print_exc()
+
+          # --- 2) เลียนแบบ _tidy() ใน fetch_data.py เป๊ะๆ
+          def tidy(df):
+              cols = ["Open","High","Low","Close","Volume"]
+              for c in cols:
+                  if c not in df.columns: df[c] = np.nan
+              return df[cols].copy().dropna(subset=["Open","High","Low","Close"])
+
+          def probe(sym, repair):
+              tag = f"{sym} repair={repair}"
+              try:
+                  df = yf.download(sym, period="400d", interval="1d",
+                                   auto_adjust=True, progress=False,
+                                   threads=False, repair=repair)
+              except Exception as e:
+                  print(f"[{tag}] EXCEPTION {type(e).__name__}: {e}"); return
+              if df is None or not len(df):
+                  print(f"[{tag}] ว่างเปล่า — Yahoo ไม่ส่งแถวมาเลย"); return
+              if hasattr(df.columns, "levels"):
+                  df = df.droplevel(1, axis=1)
+              nan = {c: int(df[c].isna().sum()) for c in
+                     ["Open","High","Low","Close","Volume"] if c in df.columns}
+              kept = len(tidy(df.copy()))
+              print(f"[{tag}] แถวดิบ {len(df)} · หลัง _tidy เหลือ {kept} · "
+                    f"guard(>=60) {'ผ่าน' if kept>=60 else 'ตก <-- ตรงนี้'}")
+              print("    NaN:", nan, "| ล่าสุด:", df.index[-1])
+              print("    3 แท่งท้าย:\n    " + df.tail(3).to_string().replace("\n","\n    "))
+
+          hr("2) ทีละตัว — เทียบ repair=False vs True")
+          for s in SYMS:
+              print(f"\n--- {s} ---")
+              probe(s, False)
+              probe(s, True)
+
+          hr("3) แบบก้อน group_by='ticker' เหมือน _download_batch")
+          try:
+              raw = yf.download(["AAPL","SPY","MSFT"], period="400d", interval="1d",
+                                group_by="ticker", auto_adjust=True,
+                                progress=False, threads=True, repair=True)
+              print("shape:", raw.shape)
+              for s in ["AAPL","SPY","MSFT"]:
+                  try:
+                      sub = raw[s].dropna(how="all")
+                      k = len(tidy(sub.copy()))
+                      print(f"  {s}: ดิบ {len(sub)} · หลัง _tidy {k} · {'ผ่าน' if k>=60 else 'ตก'}")
+                  except Exception as e:
+                      print(f"  {s}: {type(e).__name__}: {e}")
+          except Exception:
+              traceback.print_exc()
+
+          print("\nจบ")
+          PY
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: probe-report
+          path: probe_output.txt
+          retention-days: 14
