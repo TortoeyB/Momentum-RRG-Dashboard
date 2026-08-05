@@ -1,5 +1,11 @@
-yfinance>=0.2.40
-pandas>=2.0
-numpy>=1.26
-PyYAML>=6.0
-pyarrow>=14.0
+# Pin เวอร์ชันไว้ — เดิมใช้ >= ทั้งหมด ทำให้ Actions resolve dependency ใหม่
+# ทุกรอบ วันที่ 2026-08-03 scipy หลุดออกจาก dependency ทางอ้อมโดยที่โค้ด
+# ไม่ได้เปลี่ยน ทำให้ yf.download(repair=True) คืน DataFrame ว่างแบบเงียบๆ
+# ทั้ง 270 symbol และ pipeline ตายไป 5 วัน
+
+yfinance==1.5.2
+scipy==1.16.2        # จำเป็นสำหรับ repair=True — ห้ามลบ ดูคอมเมนต์ด้านบน
+pandas==3.0.5
+numpy==2.5.1
+PyYAML==6.0.2
+pyarrow==21.0.0
