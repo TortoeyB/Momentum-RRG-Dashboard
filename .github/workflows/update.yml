@@ -2,12 +2,22 @@ name: Update dashboard data
 
 on:
   schedule:
-    # 21:30 UTC = หลังตลาด US ปิด (จ.-ศ.) — ตรงกับ ~04:30 เช้าเวลาไทย
-    - cron: "30 21 * * 1-5"
-  workflow_dispatch: {}   # กดรันเองได้จากหน้า Actions
+    # ตลาด US ปิด 20:00 UTC (EDT) / 21:00 UTC (EST)
+    #
+    # ทำไมต้องมีหลายรอบ: GitHub จัดคิว scheduled run แบบ best-effort
+    # ช่วงนาที :00 และ :30 คิวแน่นที่สุด รอบของ repo เล็กๆ จะโดน delay
+    # หรือ "drop" ทิ้งไปเลย — เคสจริง 27 ส.ค. 2026 รอบ 21:30 UTC หายทั้งรอบ
+    # ข้อมูลเลยค้างที่ 26 ส.ค. (รอบก่อนหน้าวันที่ 26 ก็โดน delay ไป 3.5 ชม.แล้ว)
+    #
+    # ทางแก้: ยิงหลายรอบ + ใช้นาทีเศษๆ ที่คิวว่างกว่า
+    # รอบไหนที่ข้อมูลไม่เปลี่ยนจะไม่ commit ซ้ำ (เช็คด้วย git diff --cached)
+    # เสีย Actions minutes เพิ่ม แต่ repo public = ฟรีไม่จำกัด
+    - cron: "37 21 * * 1-5"   # 04:37 น. ไทย — รอบหลัก
+    - cron: "17 1  * * 2-6"   # 08:17 น. ไทย — สำรอง 1
+    - cron: "43 5  * * 2-6"   # 12:43 น. ไทย — สำรอง 2 (กันพลาดทั้งวัน)
+  workflow_dispatch: {}
   push:
     branches: [main]
-    # รันเมื่อแก้ "โค้ด" เท่านั้น — ไม่รวม data.json/backup ที่บอทเขียนกลับ (กัน loop)
     paths:
       - "scripts/**"
       - "requirements.txt"
@@ -16,22 +26,78 @@ on:
 permissions:
   contents: write
 
+# รอบสำรองอาจซ้อนรอบหลักที่ยังค้างคิวอยู่ — บีบให้รันทีละรอบ กัน git push ชนกัน
+concurrency:
+  group: update-data
+  cancel-in-progress: false
+
 jobs:
   update:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+
       - name: Syntax check (fail fast)
         run: python -m compileall -q scripts
+
       - run: pip install -r requirements.txt
-      - run: python scripts/run_daily.py --force
+
+      - name: Run pipeline
+        run: python scripts/run_daily.py --force
+
       - name: Commit updated data
         run: |
           git config user.name "rrg-bot"
           git config user.email "actions@github.com"
           git add docs/data.json backup/ data/names.json
-          git diff --cached --quiet || git commit -m "data: update $(date -u +%F)"
-          git push
+          if git diff --cached --quiet; then
+            echo "ไม่มีอะไรเปลี่ยน — ข้าม commit (ปกติสำหรับรอบสำรองที่ตามหลังรอบหลัก)"
+            exit 0
+          fi
+          git commit -m "data: update $(date -u +%F)"
+          for i in 1 2 3; do
+            git push && exit 0
+            echo "push ไม่ผ่าน (ครั้งที่ $i) — pull --rebase แล้วลองใหม่"
+            git pull --rebase --autostash origin main || true
+            sleep 5
+          done
+          echo "::error::push ไม่สำเร็จหลังลอง 3 ครั้ง"
+          exit 1
+
+      # ด่านสุดท้าย: ถ้าข้อมูลค้างจริง ให้ workflow "แดง" เพื่อให้ GitHub ส่งเมลเตือน
+      # ไม่งั้นรอบที่รันผ่านแต่ได้ข้อมูลเก่าจะเงียบสนิท และเรารู้ตัวก็ต่อเมื่อเปิดหน้าเว็บ
+      - name: Freshness check
+        run: |
+          python - <<'PY'
+          import json, sys
+          from datetime import datetime, timezone
+          import pandas as pd
+
+          as_of = json.load(open("docs/data.json", encoding="utf-8"))["as_of"]
+          today = pd.Timestamp(datetime.now(timezone.utc).date())
+          lag = max(0, len(pd.bdate_range(as_of, today)) - 1)
+          print(f"as_of={as_of} · ช้า {lag} วันทำการ")
+
+          # lag 0-1 = ปกติ (รอบสำรองรันก่อนตลาดวันนี้ปิด แท่งล่าสุดจึงเป็นเมื่อวาน)
+          # lag 2   = เตือน (อาจเป็นวันหยุดตลาด US เช่น Thanksgiving)
+          # lag >=3 = พังจริง — ทั้งรอบหลักและรอบสำรองไม่ได้ข้อมูลใหม่เลย
+          if lag >= 3:
+              print(f"::error::ข้อมูลค้าง {lag} วันทำการ (as_of={as_of}) "
+                    f"— เช็ค log ขั้น Run pipeline ว่า yfinance ยังดึงได้ไหม")
+              sys.exit(1)
+          if lag >= 2:
+              print(f"::warning::ข้อมูลช้า {lag} วันทำการ (as_of={as_of}) "
+                    f"— ถ้าไม่ใช่วันหยุดตลาด US ให้ตามดูรอบถัดไป")
+          PY
+
+# หมายเหตุ: GitHub ปิด scheduled workflow อัตโนมัติเมื่อ repo ไม่มีความเคลื่อนไหว 60 วัน
+# และ commit ที่ push ด้วย GITHUB_TOKEN (rrg-bot) อาจไม่นับเป็น "ความเคลื่อนไหว"
+# commit ด้วยมือล่าสุดคือ 5 ส.ค. 2026 → เส้นตายประมาณต้นเดือน ต.ค. 2026
+# ถ้า schedule เงียบไปทั้งอาทิตย์ ให้เข้าไปกด "Enable workflow" ในแท็บ Actions
+# หรือ push commit ด้วยบัญชีตัวเองสักครั้งทุกๆ 1-2 เดือน
