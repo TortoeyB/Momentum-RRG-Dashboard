@@ -67,12 +67,17 @@ jobs:
         continue-on-error: true
         run: python scripts/track_performance.py
 
+      # พอร์ตจำลองตามสัญญาณ → docs/portfolio.json (พังแล้วไม่ให้ workflow ล้มเช่นกัน)
+      - name: Paper portfolio
+        continue-on-error: true
+        run: python scripts/paper_portfolio.py
+
       - name: Commit updated data
         run: |
           git config user.name "rrg-bot"
           git config user.email "actions@github.com"
           # ไฟล์ที่ pipeline สร้าง (ของ tracker อาจไม่มีถ้า track_performance ล้ม — ห้ามทำให้ commit พัง)
-          GEN="docs/data.json docs/performance.json data/names.json data/signals_log.csv"
+          GEN="docs/data.json docs/performance.json docs/portfolio.json data/names.json data/signals_log.csv"
           stage() {
             git add backup/
             for f in $GEN; do
