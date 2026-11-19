@@ -7,67 +7,89 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+(function(){try{var t=localStorage.getItem('rrg-theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}})();
+</script>
 <style>
 :root{
   --bg:#0b0f14; --card:#11161d; --card2:#161c25; --border:#232b36;
   --ink:#e8eaed; --ink2:#9aa4b2; --ink3:#6b7684; --accent:#f0a04b;
   /* polarity: ชนะตลาด / แพ้ตลาด — คู่ฟ้า/ส้ม ผ่าน CVD check บนพื้น #11161d */
   --pos:#4f8ff7; --neg:#d9772b; --grid:#1d242e;
+  --g-lead:#22c55e; --g-imp:#60a5fa; --g-weak:#f59e0b; --g-lag:#ef4444; --on-fill:#000;
+  color-scheme:dark;
 }
+html[data-theme="light"]{
+  --bg:#f5f6f8; --card:#ffffff; --card2:#eef1f4; --border:#d5dbe3;
+  --ink:#161b22; --ink2:#3f4a57; --ink3:#5f6b7a; --accent:#c2410c;
+  /* คู่ฟ้า/ส้มของโหมดสว่าง — ผ่าน CVD check บนพื้นขาว */
+  --pos:#2563eb; --neg:#c2410c; --grid:#e6eaef;
+  --g-lead:#15803d; --g-imp:#1d4ed8; --g-weak:#b45309; --g-lag:#c62828; --on-fill:#fff;
+  color-scheme:light;
+}
+.hdr-actions{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.hdr-btn{background:var(--card2);border:1px solid var(--border);color:var(--ink);border-radius:9px;
+  padding:7px 15px;font-size:15.5px;font-weight:500;font-family:inherit;cursor:pointer;text-decoration:none;
+  display:inline-flex;align-items:center;gap:6px;line-height:1.3}
+.hdr-btn:hover{border-color:var(--accent);color:var(--accent);text-decoration:none}
+.hdr-btn.accent{border-color:var(--accent);color:var(--accent)}
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans Thai',sans-serif;
-  font-size:15px;line-height:1.6;padding:20px clamp(12px,3vw,36px) 60px}
+  font-size:16px;line-height:1.6;padding:20px clamp(12px,3vw,36px) 60px}
 .mono{font-family:'IBM Plex Mono',monospace}
 header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px}
 h1{font-size:23px;font-weight:600}
 h1 .dot{color:var(--accent)}
 a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
-.meta{color:var(--ink3);font-size:13px;margin-bottom:14px}
-h2{font-size:16px;font-weight:600;color:var(--accent);margin:28px 0 10px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
-h2 .sub{color:var(--ink3);font-weight:400;font-size:13px}
+.meta{color:var(--ink2);font-size:14px;margin-bottom:14px}
+h2{font-size:18px;font-weight:600;color:var(--accent);margin:28px 0 10px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+h2 .sub{color:var(--ink2);font-weight:400;font-size:14px}
 .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
 .note{background:var(--card2);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:8px;
-  padding:10px 14px;font-size:13.5px;color:var(--ink2)}
+  padding:10px 14px;font-size:14.5px;color:var(--ink2)}
 .controls{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
-.controls .lbl{color:var(--ink3);font-size:13px;margin-right:2px}
+.controls .lbl{color:var(--ink2);font-size:14px;margin-right:2px}
 .chip{background:var(--card2);border:1px solid var(--border);color:var(--ink2);border-radius:8px;
-  padding:4px 12px;font-size:13px;cursor:pointer;font-family:inherit}
-.chip.on{background:var(--accent);color:#000;border-color:var(--accent);font-weight:600}
-.chartwrap{position:relative;height:300px}
+  padding:5px 14px;font-size:14.5px;cursor:pointer;font-family:inherit}
+.chip.on{background:var(--accent);color:var(--on-fill);border-color:var(--accent);font-weight:600}
+.chartwrap{position:relative;height:340px}
 .tblwrap{overflow-x:auto}
-table{border-collapse:collapse;width:100%;font-size:13.5px}
+table{border-collapse:collapse;width:100%;font-size:15px}
 th,td{padding:7px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--grid)}
-th{color:var(--ink3);font-weight:500;font-size:12.5px;position:sticky;top:0;background:var(--card)}
+th{color:var(--ink2);font-weight:500;font-size:13.5px;position:sticky;top:0;background:var(--card)}
 td:first-child,th:first-child{text-align:left}
 td.l,th.l{text-align:left}
 tr:hover td{background:var(--card2)}
 .pos{color:var(--pos)} .neg{color:var(--neg)} .dim{color:var(--ink3)}
-.grade{font-weight:600;font-size:12px;border-radius:20px;padding:1px 9px;border:1px solid var(--border);display:inline-block}
-.g-BUY{color:#000;background:#22c55e;border-color:#22c55e}
-.g-ACCUM{color:#22c55e;border-color:#22c55e}
-.g-WATCH{color:#60a5fa;border-color:#60a5fa}
+.grade{font-weight:600;font-size:13px;border-radius:20px;padding:1px 9px;border:1px solid var(--border);display:inline-block}
+.g-BUY{color:var(--on-fill);background:var(--g-lead);border-color:var(--g-lead)}
+.g-ACCUM{color:var(--g-lead);border-color:var(--g-lead)}
+.g-WATCH{color:var(--g-imp);border-color:var(--g-imp)}
 .g-HOLD{color:var(--ink2)}
 .g-NONE{color:var(--ink3)}
-.g-REDUCE{color:#f59e0b;border-color:#f59e0b}
-.g-SELL{color:#000;background:#ef4444;border-color:#ef4444}
+.g-REDUCE{color:var(--g-weak);border-color:var(--g-weak)}
+.g-SELL{color:var(--on-fill);background:var(--g-lag);border-color:var(--g-lag)}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
-.stat .big{font-size:26px;font-weight:600;font-family:'IBM Plex Mono',monospace}
-.stat .cap{color:var(--ink2);font-size:13px}
-.stat ul{list-style:none;margin-top:8px;font-size:13px;color:var(--ink2)}
+.stat .big{font-size:30px;font-weight:600;font-family:'IBM Plex Mono',monospace}
+.stat .cap{color:var(--ink2);font-size:14.5px}
+.stat ul{list-style:none;margin-top:8px;font-size:14.5px;color:var(--ink2)}
 .stat li{display:flex;justify-content:space-between;gap:10px;padding:2px 0;border-bottom:1px dashed var(--grid)}
 .stat li b{color:var(--ink);font-weight:500;font-family:'IBM Plex Mono',monospace}
 .heat td.v{font-family:'IBM Plex Mono',monospace;min-width:84px}
 .err{color:var(--neg);padding:30px 0}
 .lowN{opacity:.55}
-details{margin-top:10px} summary{cursor:pointer;color:var(--ink2);font-size:13.5px}
-details ul{margin:8px 0 0 18px;color:var(--ink2);font-size:13.5px}
+details{margin-top:10px} summary{cursor:pointer;color:var(--ink2);font-size:14.5px}
+details ul{margin:8px 0 0 18px;color:var(--ink2);font-size:14.5px}
 </style>
 </head>
 <body>
 
 <header>
   <h1>Signal Performance <span class="dot">·</span> RRG</h1>
-  <a href="index.html">← กลับ dashboard</a>
+  <div class="hdr-actions">
+    <a class="hdr-btn accent" href="index.html">← กลับ dashboard</a>
+    <button class="hdr-btn" id="themeBtn" type="button" aria-label="สลับโหมดสว่าง/มืด"></button>
+  </div>
 </header>
 <div class="meta" id="meta">กำลังโหลด…</div>
 
@@ -137,16 +159,16 @@ function renderGrade(host) {
                     `ชนะตลาด ${r.hit ?? "—"}%  ·  n = ${r.n}`,
                     `ผลตอบแทนเฉลี่ย ${fmt(r.avg)}%  ·  MAE ${fmt(r.mae)}%`];
           }}}},
-      scales: {x: {grid: {display: false}, ticks: {color: css("--ink2")}},
-        y: {grid: {color: css("--grid")}, ticks: {color: css("--ink3"), callback: v => v + "%"},
+      scales: {x: {grid: {display: false}, ticks: {color: css("--ink2"), font: {size: 14}}},
+        y: {grid: {color: css("--grid")}, ticks: {color: css("--ink2"), font: {size: 13}, callback: v => v + "%"},
             title: {display: true, text: `Excess vs S&P 500 · ${H} วัน`, color: css("--ink3")}}}},
     plugins: [{id: "labels", afterDatasetsDraw(c) {
       const {ctx} = c; ctx.save();
-      ctx.font = "500 12px 'IBM Plex Mono', monospace"; ctx.textAlign = "center";
+      ctx.font = "600 13.5px 'IBM Plex Mono', monospace"; ctx.textAlign = "center";
       c.getDatasetMeta(0).data.forEach((bar, i) => {
         const v = vals[i]; if (v == null) return;
         ctx.fillStyle = css("--ink");
-        const y = v >= 0 ? bar.y - 6 : bar.y + 15;
+        const y = v >= 0 ? bar.y - 7 : bar.y + 17;
         ctx.fillText(fmt(v, 1) + "%", bar.x, y);
       });
       ctx.restore();
@@ -285,8 +307,30 @@ function section(title, sub) {
 }
 
 fetch("performance.json?v=" + Date.now()).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
-  .then(d => {
-    D = d;
+  .then(d => { D = d; build(); })
+  .catch(e => {
+    document.getElementById("meta").textContent = "";
+    document.getElementById("app").append(el("div", {class: "err",
+      text: "โหลด performance.json ไม่ได้ (" + e.message + ") — workflow อาจยังไม่ได้รัน track_performance.py"}));
+  });
+
+function themeLabel() {
+  const light = document.documentElement.dataset.theme === "light";
+  document.getElementById("themeBtn").textContent = light ? "🌙 โหมดมืด" : "☀️ โหมดสว่าง";
+}
+document.getElementById("themeBtn").onclick = () => {
+  const t = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem("rrg-theme", t); } catch (e) {}
+  themeLabel();
+  if (D) build();                 // กราฟ/heatmap อ่านสีตอนวาด → วาดใหม่ทั้งหน้า
+};
+themeLabel();
+
+function build() {
+    const d = D;
+    document.getElementById("app").replaceChildren();
+    if (chart) { chart.destroy(); chart = null; }
     const P = d.params;
     document.getElementById("meta").textContent =
       `${d.range[0]} → ${d.range[1]} · ${d.snapshots} วัน · ${d.symbols} symbols · ${d.episodes} episodes · ` +
@@ -308,12 +352,7 @@ fetch("performance.json?v=" + Date.now()).then(r => { if (!r.ok) throw new Error
       el("li", {text: `กลยุทธ์ C: ไม้ 1 ที่วันเริ่ม WATCH, ไม้ 2–3 ที่วันแรกของ ACCUM/BUY ภายใน ${P.lookahead} วัน แล้วปิดพร้อมกันที่วันที่ ${P.main_h}`}),
       el("li", {text: "Version: v1 = ก่อน 4 ส.ค. 2026 · v1.1 = ส.ค.–19 พ.ย. · v1.2 = หลังแก้แท่งที่ตลาดยังไม่ปิด"})));
     app.append(det);
-  })
-  .catch(e => {
-    document.getElementById("meta").textContent = "";
-    document.getElementById("app").append(el("div", {class: "err",
-      text: "โหลด performance.json ไม่ได้ (" + e.message + ") — workflow อาจยังไม่ได้รัน track_performance.py"}));
-  });
+}
 </script>
 </body>
 </html>
