@@ -36,6 +36,14 @@ from indicators import compute_all, slope_up
 # ค่าคงที่ปรับจูน (แก้ที่เดียว มีผลทั้งระบบ)
 # ----------------------------------------------------------------
 
+# เวอร์ชันของ logic สัญญาณ — บันทึกลง data.json ทุกวัน ให้ performance tracker แยกผลตามเวอร์ชันได้
+# ต้อง bump ทุกครั้งที่แก้อะไรที่ทำให้คะแนน/เกรดเปลี่ยน (น้ำหนัก, เกณฑ์, indicator, ข้อมูลที่ป้อน)
+# ประวัติ:
+#   v1   ≤ 2026-08-04  ก่อนแก้ dependency / exchange suffix (DFNS/NUCL/QNTM map ผิดตัว)
+#   v1.1   2026-08 → 2026-11-19  ADX interp, MA graded, bar_shock veto, split adjust
+#   v1.2   2026-11-20  ตัดแท่งที่ตลาดยังไม่ปิด (crypto/futures/FX/^VIX/เอเชียรอบสำรอง)
+SIGNAL_VERSION = "v1.2"
+
 WEIGHTS = {"cipher": 0.35, "hull": 0.25, "ma50": 0.20, "ma200": 0.20}
 
 HARD_DOWN_RET = -0.03   # ผลตอบแทนแท่งเดียวที่ถือว่ารุนแรง

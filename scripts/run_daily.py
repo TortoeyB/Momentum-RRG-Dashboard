@@ -23,7 +23,8 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fetch_data import ROOT, load_themes, get_data, load_watchlists, load_names
 from data_quality import audit
-from scoring import score_series, quadrant, price_structure, significant_pattern, signal, signal_with_age
+from scoring import (score_series, quadrant, price_structure, significant_pattern, signal,
+                     signal_with_age, SIGNAL_VERSION)
 import math
 
 
@@ -195,6 +196,9 @@ def main():
             print(f"[warn] ลิสต์ {k}: ไม่มี symbol ที่ดึงข้อมูลได้เลย — ไม่สร้าง tab")
     n_bad = sum(1 for q in quality.values() if q.get("status") == "bad")
     payload = {"as_of": as_of, "demo": demo, "tail_len": TAIL_LEN,
+               # สำหรับ performance tracker: แยกผลตามเวอร์ชัน logic + รู้ว่ารันจริงตอนไหน
+               "signal_version": SIGNAL_VERSION,
+               "generated_at": pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%dT%H:%MZ"),
                "quality_bad": n_bad, "quality_flagged": len(quality),
                "themes": themes_out, "watchlists": watchlists_out}
 

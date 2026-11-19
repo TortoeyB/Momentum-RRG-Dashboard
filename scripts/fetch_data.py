@@ -218,6 +218,91 @@ def _calendar_group(sym: str) -> str:
     return "us"
 
 
+# ----------------------------------------------------------------
+# ตัดแท่งที่ "ยังไม่ปิด" ออกก่อนคำนวณ
+# ----------------------------------------------------------------
+# 2026-11-19: วัดจาก backup 89 วัน — ราคาปิดแท่งล่าสุดถูกแก้ย้อนหลังวันถัดไป (>1%)
+#   futures 28–46% ของวัน, crypto 27–34%, ^VIX 49%, FX ~19% แต่หุ้น US แทบ 0%
+# สาเหตุ: ตอน pipeline รัน (21:37 UTC + รอบสำรอง 01:17/05:43 UTC) ตลาดพวกนี้ยังเปิด
+#   หรือ Yahoo สร้างแท่งของวันใหม่ไว้แล้ว → indicator/สัญญาณคำนวณจากราคาระหว่างวัน
+#   แล้ววันรุ่งขึ้นสัญญาณของวันเดิมก็เปลี่ยน (ย้อนดูไม่ได้ ไม่ reproducible)
+# วิธีแก้: แท่งวันที่ D จะถูกใช้ก็ต่อเมื่อเลยเวลาปิดของตลาดนั้นในวันที่ D แล้ว
+#   (เวลาท้องถิ่น + timezone → DST ถูกต้องเอง)  ไม่งั้นตัดทิ้ง ใช้แท่งก่อนหน้าแทน
+# หมายเหตุ: ไม่แก้ cache — ตัดตอนโหลดเข้า pipeline เท่านั้น
+
+# (timezone, ชั่วโมง, นาที) ที่ถือว่าแท่งของวันนั้นปิดแล้ว — เผื่อเวลาให้ Yahoo อัปเดตเล็กน้อย
+# 24:00 = เที่ยงคืนของวันถัดไป
+SESSION_CLOSE = {
+    "us":      ("America/New_York", 16, 30),   # หุ้น 16:00 / ^VIX settle 16:15
+    "eu":      ("Europe/London",    17, 0),    # LSE 16:35 · Stoxx 17:30 CET
+    "th":      ("Asia/Bangkok",     17, 0),
+    "futures": ("America/New_York", 17, 15),   # CME Globex ปิดรอบวัน 17:00 ET
+    "fx":      ("Europe/London",    24, 0),    # แท่ง FX ของ Yahoo = วันตามเวลาลอนดอน
+    "crypto":  ("UTC",              24, 0),    # แท่ง crypto ของ Yahoo = วัน UTC
+}
+# ตลาดเอเชียปิดไม่พร้อมกัน — แยกตาม ticker/suffix
+ASIA_CLOSE = {
+    "shanghai": ("Asia/Shanghai",  15, 15),    # .SS .SZ 000300 000905
+    "hongkong": ("Asia/Hong_Kong", 16, 30),    # .HK ^HSI ^HSTECH
+    "tokyo":    ("Asia/Tokyo",     15, 45),    # .T ^N225
+    "seoul":    ("Asia/Seoul",     15, 45),    # .KS ^KS11
+    "india":    ("Asia/Kolkata",   15, 45),    # ^BSESN ^NSEI
+}
+
+
+def _session_close(sym: str) -> tuple[str, int, int]:
+    g = _calendar_group(sym)
+    if g != "asia":
+        return SESSION_CLOSE[g]
+    if sym.endswith((".SS", ".SZ")):
+        return ASIA_CLOSE["shanghai"]
+    if sym.endswith(".HK") or sym in ("^HSI", "^HSTECH"):
+        return ASIA_CLOSE["hongkong"]
+    if sym.endswith(".T") or sym == "^N225":
+        return ASIA_CLOSE["tokyo"]
+    if sym.endswith(".KS") or sym == "^KS11":
+        return ASIA_CLOSE["seoul"]
+    if sym in ("^BSESN", "^NSEI"):
+        return ASIA_CLOSE["india"]
+    return ASIA_CLOSE["india"]            # ไม่รู้จัก → ใช้ตัวที่ปิดช้าสุด (ปลอดภัยกว่า)
+
+
+def bar_close_utc(sym: str, bar_date) -> pd.Timestamp:
+    """เวลา (UTC) ที่แท่งรายวันของ sym วันที่ bar_date ถือว่าปิดสมบูรณ์"""
+    tz, hh, mm = _session_close(sym)
+    d = pd.Timestamp(bar_date)
+    if d.tzinfo is not None:
+        d = d.tz_localize(None)
+    d = d.normalize()
+    if hh >= 24:
+        local = (d + pd.Timedelta(days=1)).tz_localize(tz)
+    else:
+        local = (d + pd.Timedelta(hours=hh, minutes=mm)).tz_localize(tz)
+    return local.tz_convert("UTC")
+
+
+def drop_unclosed_bars(data: dict[str, pd.DataFrame],
+                       now: pd.Timestamp | None = None) -> dict[str, pd.DataFrame]:
+    """ตัดแท่งท้ายที่ยังไม่ถึงเวลาปิดตลาดออก (คืน dict ใหม่ ไม่แก้ของเดิม)"""
+    now = pd.Timestamp.now(tz="UTC") if now is None else pd.Timestamp(now)
+    if now.tzinfo is None:
+        now = now.tz_localize("UTC")
+    out: dict[str, pd.DataFrame] = {}
+    dropped: dict[str, list[str]] = collections.defaultdict(list)
+    for s, df in data.items():
+        n = len(df)
+        k = n
+        while k > 0 and bar_close_utc(s, df.index[k - 1]) > now:
+            k -= 1
+        if k < n:
+            dropped[_calendar_group(s)].append(s)
+        out[s] = df.iloc[:k] if k < n else df
+    if dropped:
+        parts = ", ".join(f"{g}:{len(v)}" for g, v in sorted(dropped.items()))
+        print(f"[bars] ตัดแท่งที่ตลาดยังไม่ปิด ({now:%Y-%m-%d %H:%M} UTC) — {parts}")
+    return out
+
+
 _REPAIR_OK = True   # ปิดอัตโนมัติถ้า repair ใช้การไม่ได้ในสภาพแวดล้อมนี้
 
 
@@ -440,7 +525,8 @@ def get_data(cfg: dict, demo: bool = False, extra: list[str] | None = None,
     if demo:
         print(f"[demo] สร้างข้อมูลจำลอง {len(syms)} symbols")
         return synth_ohlcv(syms)
-    return fetch_ohlcv(syms, force=force)
+    # ตัดแท่งที่ยังไม่ปิด (crypto/futures/FX/รอบสำรองตอนเอเชียเปิด) ก่อนส่งไปคำนวณ
+    return drop_unclosed_bars(fetch_ohlcv(syms, force=force))
 
 
 if __name__ == "__main__":
