@@ -23,6 +23,7 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fetch_data import ROOT, load_themes, get_data, load_watchlists, load_names
 from data_quality import audit
+from signals_log import append_live
 from scoring import (score_series, quadrant, price_structure, significant_pattern, signal,
                      signal_with_age, SIGNAL_VERSION)
 import math
@@ -213,6 +214,14 @@ def main():
     backup = os.path.join(backup_dir, f"data_{as_of}.json")
     shutil.copyfile(out, backup)
     print(f"[ok] สำเนา {backup}")
+
+    # log สัญญาณแบบไม่แก้ย้อนหลัง (รอบแรกของแต่ละ as_of ชนะ) → ใช้ใน track_performance.py
+    # พังแล้วไม่ให้ทั้ง pipeline ล้ม: data.json ต้องออกเสมอ
+    try:
+        bar_dates = {s: df.index[-1].strftime("%Y-%m-%d") for s, df in data.items() if len(df)}
+        append_live(_clean(payload), bar_dates)
+    except Exception as e:  # noqa
+        print(f"[warn] เขียน signals_log ไม่สำเร็จ ({type(e).__name__}: {e})")
 
 
 if __name__ == "__main__":
