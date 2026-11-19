@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paper Portfolio — RRG Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+(function(){try{var t=localStorage.getItem('rrg-theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}})();
+</script>
+<style>
+:root{
+  --bg:#0b0f14; --card:#11161d; --card2:#161c25; --border:#232b36;
+  --ink:#e8eaed; --ink2:#9aa4b2; --ink3:#6b7684; --accent:#f0a04b; --grid:#1d242e;
+  /* เส้นพอร์ต / S&P ผ่าน CVD check บนพื้น #11161d · EW = เทากลาง (เส้นประ) */
+  --s-pf:#d9772b; --s-spx:#4f8ff7; --s-ew:#8b95a3;
+  --pos:#4f8ff7; --neg:#d9772b;
+  --g-lead:#22c55e; --g-imp:#60a5fa; --g-weak:#f59e0b; --g-lag:#ef4444; --on-fill:#000;
+  color-scheme:dark;
+}
+html[data-theme="light"]{
+  --bg:#f5f6f8; --card:#ffffff; --card2:#eef1f4; --border:#d5dbe3;
+  --ink:#161b22; --ink2:#3f4a57; --ink3:#5f6b7a; --accent:#c2410c; --grid:#e6eaef;
+  --s-pf:#c2410c; --s-spx:#2563eb; --s-ew:#6b7280;
+  --pos:#2563eb; --neg:#c2410c;
+  --g-lead:#15803d; --g-imp:#1d4ed8; --g-weak:#b45309; --g-lag:#c62828; --on-fill:#fff;
+  color-scheme:light;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans Thai',sans-serif;
+  font-size:16px;line-height:1.6;padding:20px clamp(12px,3vw,36px) 60px}
+.mono{font-family:'IBM Plex Mono',monospace}
+header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+h1{font-size:23px;font-weight:600}
+h1 .dot{color:var(--accent)}
+.hdr-actions{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.hdr-btn{background:var(--card2);border:1px solid var(--border);color:var(--ink);border-radius:9px;
+  padding:7px 15px;font-size:15.5px;font-weight:500;font-family:inherit;cursor:pointer;text-decoration:none;
+  display:inline-flex;align-items:center;gap:6px;line-height:1.3}
+.hdr-btn:hover{border-color:var(--accent);color:var(--accent)}
+.hdr-btn.accent{border-color:var(--accent);color:var(--accent)}
+.meta{color:var(--ink2);font-size:14px;margin-bottom:14px}
+h2{font-size:18px;font-weight:600;color:var(--accent);margin:28px 0 10px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+h2 .sub{color:var(--ink2);font-weight:400;font-size:14px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+.note{background:var(--card2);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:8px;
+  padding:10px 14px;font-size:14.5px;color:var(--ink2)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.tile{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
+.tile .v{font-size:26px;font-weight:600;font-family:'IBM Plex Mono',monospace;line-height:1.2}
+.tile .k{color:var(--ink2);font-size:14px}
+.tile .s{color:var(--ink3);font-size:13px;margin-top:2px}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:14.5px;color:var(--ink2);margin-bottom:8px}
+.legend .key{display:inline-flex;align-items:center;gap:7px}
+.legend .ln{width:22px;height:0;border-top:3px solid}
+.legend .ln.dash{border-top-style:dashed}
+.chartbox{position:relative;height:360px}
+.chartbox.sm{height:180px}
+.chartbox.px{height:340px}
+.controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.controls .lbl{color:var(--ink2);font-size:14px}
+select{background:var(--card2);border:1px solid var(--border);color:var(--ink);border-radius:8px;
+  padding:6px 10px;font-size:15px;font-family:inherit}
+.chip{background:var(--card2);border:1px solid var(--border);color:var(--ink2);border-radius:8px;
+  padding:5px 14px;font-size:14.5px;cursor:pointer;font-family:inherit}
+.chip.on{background:var(--accent);color:var(--on-fill);border-color:var(--accent);font-weight:600}
+.tblwrap{overflow:auto}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{padding:7px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--grid)}
+th{color:var(--ink2);font-weight:500;font-size:13.5px;position:sticky;top:0;background:var(--card)}
+td:first-child,th:first-child{text-align:left}
+th.sortable{cursor:pointer;user-select:none}
+th.sortable:hover,th.sortable.on{color:var(--accent)}
+th .arw{font-size:11px;opacity:.55} th.on .arw{opacity:1}
+td.l,th.l{text-align:left}
+tbody tr{cursor:pointer}
+tbody tr:hover td{background:var(--card2)}
+tbody tr.sel td{background:var(--card2);box-shadow:inset 3px 0 0 var(--accent)}
+.pos{color:var(--pos)} .neg{color:var(--neg)} .dim{color:var(--ink3)}
+.grade{font-weight:600;font-size:13px;border-radius:20px;padding:1px 9px;border:1px solid var(--border);display:inline-block}
+.g-BUY{color:var(--on-fill);background:var(--g-lead);border-color:var(--g-lead)}
+.g-ACCUM{color:var(--g-lead);border-color:var(--g-lead)}
+.g-ACCUM→BUY{color:var(--g-lead);border-color:var(--g-lead)}
+.err{color:var(--neg);padding:30px 0}
+.empty{color:var(--ink3);padding:10px 0;font-size:14.5px}
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:4px 24px;font-size:14.5px;color:var(--ink2)}
+.rules b{color:var(--ink);font-weight:500}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Paper Portfolio <span class="dot">·</span> RRG</h1>
+  <div class="hdr-actions">
+    <a class="hdr-btn accent" href="index.html">← Dashboard</a>
+    <a class="hdr-btn" href="performance.html">📈 Signal Performance</a>
+    <button class="hdr-btn" id="themeBtn" type="button" aria-label="สลับโหมดสว่าง/มืด"></button>
+  </div>
+</header>
+<div class="meta" id="meta">กำลังโหลด…</div>
+<div id="app"></div>
+
+<script>
+"use strict";
+let D = null, charts = {}, SEL = null, SELTRADE = null, SK = "entry", SDIR = -1;
+
+const el = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v; else if (k === "text") e.textContent = v; else e.setAttribute(k, v);
+  }
+  for (const k of kids) if (k != null) e.append(k);
+  return e;
+};
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt = (v, d = 2) => v == null ? "—" : (v > 0 ? "+" : "") + v.toFixed(d);
+const pctTd = v => el("td", {class: "mono " + (v == null ? "dim" : v > 0 ? "pos" : v < 0 ? "neg" : ""), text: v == null ? "—" : fmt(v) + "%"});
+const td = (t, cls = "mono") => el("td", {class: cls, text: t == null ? "—" : String(t)});
+const pill = g => el("span", {class: "grade g-" + g, text: g});
+const money = v => v == null ? "—" : (v < 0 ? "−" : "") + Math.abs(v).toLocaleString("en-US", {maximumFractionDigits: 0});
+
+function section(title, sub) {
+  const body = el("div");
+  document.getElementById("app").append(el("h2", {}, el("span", {text: title}),
+    sub ? el("span", {class: "sub", text: sub}) : null), body);
+  return body;
+}
+function killChart(k) { if (charts[k]) { charts[k].destroy(); delete charts[k]; } }
+const axis = (title, cb) => ({grid: {color: css("--grid")}, ticks: {color: css("--ink2"), font: {size: 13}, callback: cb},
+  title: title ? {display: true, text: title, color: css("--ink2"), font: {size: 13}} : undefined});
+const xTime = () => ({grid: {display: false}, ticks: {color: css("--ink2"), font: {size: 13}, maxTicksLimit: 8, maxRotation: 0}});
+const tipStyle = () => ({backgroundColor: css("--card2"), borderColor: css("--border"), borderWidth: 1,
+  titleColor: css("--ink"), bodyColor: css("--ink2"), titleFont: {size: 14}, bodyFont: {size: 14}, padding: 10});
+
+// ---------------- สรุปตัวเลข ----------------
+function renderTiles(host) {
+  const S = D.stats, P = S.portfolio;
+  const tile = (k, v, s, cls = "") => el("div", {class: "tile"}, el("div", {class: "k", text: k}),
+    el("div", {class: "v " + cls, text: v}), s ? el("div", {class: "s", text: s}) : null);
+  const sign = v => v == null ? "" : v > 0 ? "pos" : v < 0 ? "neg" : "";
+  const L = S.live, since = D.rules.live_since;
+  host.append(el("div", {class: "tiles"},
+    L ? tile(`ใช้จริงตั้งแต่ ${since}`, fmt(L.ret) + "%", `S&P 500 ${fmt(L.spx)}% · ${L.days} วัน · ขาย ${L.trades} ครั้ง`, sign(L.ret))
+      : tile(`ใช้จริงตั้งแต่ ${since}`, "รอข้อมูล", "เริ่มนับจากวันทำการแรก", ""),
+    tile("ทั้งช่วง (รวม backtest)", fmt(P.ret) + "%", `S&P 500 ${fmt(S.spx.ret)}% · EW ${fmt(S.ew.ret)}% · ชนะ S&P ${fmt(P.ret - S.spx.ret)}%`, sign(P.ret)),
+    tile("Max drawdown", fmt(P.max_dd) + "%", `S&P ${fmt(S.spx.max_dd)}% · EW ${fmt(S.ew.max_dd)}%`),
+    tile("รายการขาย", String(P.trades), `กำไร ${P.win_rate ?? "—"}% · ถือเฉลี่ย ${P.avg_bars ?? "—"} วัน · นับขายบางส่วนแยก`),
+    tile("ต่อเทรด", fmt(P.avg_trade) + "%", `ชนะเฉลี่ย ${fmt(P.avg_win)}% · แพ้เฉลี่ย ${fmt(P.avg_loss)}%`, sign(P.avg_trade)),
+    tile("Profit factor", P.profit_factor == null ? "—" : P.profit_factor.toFixed(2), "กำไรรวม ÷ ขาดทุนรวม"),
+    tile("ลงทุนเฉลี่ย", (P.exposure ?? "—") + "%", "ที่เหลือเป็นเงินสด 0%")));
+}
+
+// ---------------- กราฟเส้นพอร์ต + drawdown ----------------
+function renderEquity(host) {
+  const C = D.curve, base = C[0];
+  const pct = (v, b) => v == null || b == null ? null : (v / b - 1) * 100;
+  const series = [
+    ["pf", "พอร์ตจำลอง", css("--s-pf"), false, 2.5],
+    ["spx", "S&P 500", css("--s-spx"), false, 2],
+    ["ew", "ถือทุกตัวเท่ากัน (EW)", css("--s-ew"), true, 2]];
+  host.append(el("div", {class: "legend"}, ...series.map(([, n, c, dash]) =>
+    el("span", {class: "key"}, el("span", {class: "ln" + (dash ? " dash" : ""), style: `border-top-color:${c}`}), el("span", {text: n})))));
+  const cv1 = el("canvas", {role: "img", "aria-label": "ผลตอบแทนสะสมของพอร์ตจำลองเทียบ S&P 500", "data-labelled": "1"});
+  const cv2 = el("canvas", {role: "img", "aria-label": "Drawdown ของพอร์ตจำลองเทียบ S&P 500"});
+  host.append(el("div", {class: "card"}, el("div", {class: "chartbox"}, cv1),
+    el("div", {class: "meta", style: "margin:10px 0 4px", text: "Drawdown — ลดลงจากจุดสูงสุดเดิม"}),
+    el("div", {class: "chartbox sm"}, cv2)));
+  const labels = C.map(r => r.d);
+  killChart("eq"); killChart("dd");
+  charts.eq = new Chart(cv1, {type: "line",
+    data: {labels, datasets: series.map(([k, n, c, dash, w]) => ({label: n, data: C.map(r => pct(r[k], base[k])),
+      borderColor: c, backgroundColor: c, borderWidth: w, borderDash: dash ? [6, 4] : [], pointRadius: 0, pointHitRadius: 8, tension: .15}))},
+    options: {maintainAspectRatio: false, animation: false, interaction: {mode: "index", intersect: false},
+      plugins: {legend: {display: false}, tooltip: {...tipStyle(), callbacks: {
+        label: c => ` ${c.dataset.label}  ${fmt(c.raw)}%`,
+        afterBody: it => { const r = C[it[0].dataIndex]; return [`ลงทุนอยู่ ${r.inv}% · ${r.n} ตัว`]; }}}},
+      scales: {x: xTime(), y: axis("ผลตอบแทนสะสม", v => v + "%")}},
+    plugins: [liveLine, crosshair]});
+  const dd = k => { let pk = -Infinity; return C.map(r => { pk = Math.max(pk, r[k]); return (r[k] / pk - 1) * 100; }); };
+  charts.dd = new Chart(cv2, {type: "line",
+    data: {labels, datasets: [
+      {label: "พอร์ตจำลอง", data: dd("pf"), borderColor: css("--s-pf"), backgroundColor: css("--s-pf") + "33", fill: "origin", borderWidth: 1.5, pointRadius: 0, pointHitRadius: 8},
+      {label: "S&P 500", data: dd("spx"), borderColor: css("--s-spx"), borderWidth: 1.5, pointRadius: 0, pointHitRadius: 8}]},
+    options: {maintainAspectRatio: false, animation: false, interaction: {mode: "index", intersect: false},
+      plugins: {legend: {display: false}, tooltip: {...tipStyle(), callbacks: {label: c => ` ${c.dataset.label}  ${c.raw.toFixed(2)}%`}}},
+      scales: {x: xTime(), y: axis(null, v => v + "%")}},
+    plugins: [liveLine, crosshair]});
+}
+// เส้นแบ่ง: ก่อนหน้า = backtest ที่รู้ผลแล้ว · หลัง = ใช้จริง
+const liveLine = {id: "live", afterDatasetsDraw(c) {
+  const since = D.rules.live_since, labels = c.data.labels;
+  let i = labels.findIndex(d => d >= since);
+  const {ctx, chartArea: a, scales: {x}} = c;
+  const px = i >= 0 ? x.getPixelForValue(i) : a.right;
+  ctx.save();
+  ctx.fillStyle = css("--ink3") + "14"; ctx.fillRect(a.left, a.top, px - a.left, a.bottom - a.top);
+  ctx.strokeStyle = css("--accent"); ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
+  ctx.beginPath(); ctx.moveTo(px, a.top); ctx.lineTo(px, a.bottom); ctx.stroke();
+  if (c.canvas.dataset.labelled) {
+    ctx.setLineDash([]); ctx.font = "500 13px 'IBM Plex Sans Thai', sans-serif"; ctx.fillStyle = css("--ink2");
+    ctx.textAlign = "right"; ctx.fillText("◀ backtest (รู้ผลแล้ว)", px - 8, a.top + 16);
+    ctx.textAlign = "left"; ctx.fillStyle = css("--accent"); ctx.fillText("ใช้จริง ▶", px + 8, a.top + 16);
+  }
+  ctx.restore(); }};
+const crosshair = {id: "xh", afterDatasetsDraw(c) {
+  const a = c.tooltip && c.tooltip.getActiveElements(); if (!a || !a.length) return;
+  const x = a[0].element.x, {top, bottom} = c.chartArea, ctx = c.ctx;
+  ctx.save(); ctx.strokeStyle = css("--ink3"); ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+  ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke(); ctx.restore(); }};
+
+// ---------------- จุดซื้อ/ขาย บนกราฟราคา ----------------
+function allTrades() { return [...D.open, ...D.trades]; }
+function renderPx(host) {
+  host.replaceChildren();
+  const insts = [...new Set(allTrades().sort((a, b) => b.entry.localeCompare(a.entry)).map(t => t.inst))];
+  if (!insts.length) { host.append(el("div", {class: "empty", text: "ยังไม่มีเทรด"})); return; }
+  if (!SEL || !insts.includes(SEL)) SEL = insts[0];
+  const sel = el("select", {"aria-label": "เลือกตัวที่จะดูจุดซื้อขาย"});
+  for (const i of insts) {
+    const tr = allTrades().filter(t => t.inst === i), src = tr[0].sym;
+    const o = el("option", {value: i, text: `${i}${src !== i ? " (สัญญาณจาก " + src + ")" : ""} · ${tr.length} เทรด`});
+    if (i === SEL) o.selected = true;
+    sel.append(o);
+  }
+  sel.onchange = () => { SEL = sel.value; SELTRADE = null; renderPx(host); renderLog(logHost); };
+  host.append(el("div", {class: "controls"}, el("span", {class: "lbl", text: "ตัวที่เทรด"}), sel),
+    el("div", {class: "legend"},
+      el("span", {class: "key"}, el("span", {text: "▲", style: `color:${css("--pos")};font-size:16px`}), el("span", {text: "ซื้อ / เติมไม้"})),
+      el("span", {class: "key"}, el("span", {text: "▼", style: `color:${css("--neg")};font-size:16px`}), el("span", {text: "ขาย"})),
+      el("span", {class: "key"}, el("span", {style: `display:inline-block;width:22px;height:12px;background:${css("--accent")}22;border:1px solid ${css("--accent")}55`}), el("span", {text: "ช่วงที่ถืออยู่"}))));
+  const P = D.prices[SEL], tr = allTrades().filter(t => t.inst === SEL);
+  const idx = Object.fromEntries(P.d.map((d, i) => [d, i]));
+  const buys = P.d.map(() => null), sells = P.d.map(() => null), info = {};
+  for (const t of tr) {
+    for (const a of t.adds) if (a.date in idx) { buys[idx[a.date]] = a.px; (info["b" + idx[a.date]] ??= []).push(`ซื้อ ${a.grade} @ ${a.px}`); }
+    if (!t.open && t.exit in idx) { sells[idx[t.exit]] = t.exit_px; (info["s" + idx[t.exit]] ??= []).push(`ขาย @ ${t.exit_px} · ${t.reason} · ${fmt(t.ret)}%`); }
+  }
+  const cv = el("canvas", {role: "img", "aria-label": `ราคา ${SEL} พร้อมจุดซื้อขายของพอร์ตจำลอง`});
+  host.append(el("div", {class: "card"}, el("div", {class: "chartbox px"}, cv)));
+  const hold = {id: "hold", beforeDatasetsDraw(c) {
+    const {ctx, chartArea: a, scales: {x}} = c; ctx.save();
+    for (const t of tr) {
+      const i0 = idx[t.entry], i1 = t.open ? P.d.length - 1 : idx[t.exit];
+      if (i0 == null || i1 == null) continue;
+      const on = SELTRADE && SELTRADE.entry === t.entry;
+      ctx.fillStyle = css("--accent") + (on ? "44" : "1f");
+      ctx.fillRect(x.getPixelForValue(i0), a.top, Math.max(2, x.getPixelForValue(i1) - x.getPixelForValue(i0)), a.bottom - a.top);
+    }
+    ctx.restore(); }};
+  killChart("px");
+  charts.px = new Chart(cv, {type: "line",
+    data: {labels: P.d, datasets: [
+      {label: "ราคา", data: P.c, borderColor: css("--ink2"), borderWidth: 1.8, pointRadius: 0, pointHitRadius: 6, tension: .1, order: 3},
+      {label: "ซื้อ", data: buys, showLine: false, pointStyle: "triangle", pointRadius: 9, pointHoverRadius: 11,
+       backgroundColor: css("--pos"), borderColor: css("--card"), borderWidth: 2, order: 1},
+      {label: "ขาย", data: sells, showLine: false, pointStyle: "triangle", rotation: 180, pointRadius: 9, pointHoverRadius: 11,
+       backgroundColor: css("--neg"), borderColor: css("--card"), borderWidth: 2, order: 2}]},
+    options: {maintainAspectRatio: false, animation: false, interaction: {mode: "index", intersect: false},
+      plugins: {legend: {display: false}, tooltip: {...tipStyle(), filter: it => it.raw != null,
+        callbacks: {label: c => c.datasetIndex === 0 ? ` ราคา ${c.raw}` : null,
+          afterBody: it => [...(info["b" + it[0].dataIndex] || []), ...(info["s" + it[0].dataIndex] || [])]}}},
+      scales: {x: xTime(), y: axis(SEL, null)}},
+    plugins: [hold, crosshair]});
+}
+
+// ---------------- ตาราง ----------------
+const COLS = [
+  ["inst", "ตัวที่ถือ", true, 1], ["sym", "สัญญาณจาก", true, 1], ["grade", "เข้าด้วย", true, 1],
+  ["entry", "วันซื้อ", true, -1], ["exit", "วันขาย", true, -1], ["bars", "ถือ (วัน)", false, -1],
+  ["weight", "ขนาด", false, -1], ["ret", "ผลตอบแทน (หลังค่าธรรมเนียม)", false, -1],
+  ["pnl", "กำไร/ขาดทุน", false, -1], ["reason", "เหตุผลที่ขาย", true, 1]];
+let logHost = null, pxHost = null;
+function tradeTable(rows, sortable, onPick) {
+  const hr = el("tr");
+  for (const [k, label, left, first] of COLS) {
+    if (!sortable) { hr.append(el("th", {class: left ? "l" : "", text: label})); continue; }
+    const on = SK === k;
+    const th = el("th", {class: "sortable" + (left ? " l" : "") + (on ? " on" : ""), tabindex: "0",
+      "aria-sort": on ? (SDIR > 0 ? "ascending" : "descending") : "none"});
+    th.append(label, el("span", {class: "arw", text: on ? (SDIR > 0 ? " ▲" : " ▼") : " ↕"}));
+    const go = () => { if (SK === k) SDIR = -SDIR; else { SK = k; SDIR = first; } renderLog(logHost); };
+    th.onclick = go; th.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } };
+    hr.append(th);
+  }
+  const tb = el("tbody");
+  for (const t of rows) {
+    const tr = el("tr", {class: SELTRADE && SELTRADE.inst === t.inst && SELTRADE.entry === t.entry ? "sel" : "", tabindex: "0"},
+      td(t.inst), td(t.sym, "l mono dim"), el("td", {class: "l"}, pill(t.grade)), td(t.entry, "l mono"),
+      td(t.open ? "ยังถือ" : t.exit, "l mono" + (t.open ? " dim" : "")), td(t.bars), td(t.weight + "%"),
+      pctTd(t.ret), el("td", {class: "mono " + (t.pnl > 0 ? "pos" : t.pnl < 0 ? "neg" : ""), text: money(t.pnl)}),
+      td(t.reason, "l" + (t.open ? " dim" : "")));
+    const pick = () => onPick(t);
+    tr.onclick = pick; tr.onkeydown = e => { if (e.key === "Enter") pick(); };
+    tb.append(tr);
+  }
+  return el("table", {}, el("thead", {}, hr), tb);
+}
+function pickTrade(t) {
+  SEL = t.inst; SELTRADE = t; renderPx(pxHost); renderLog(logHost); renderOpen(openHost);
+  pxHost.scrollIntoView({behavior: "smooth", block: "center"});
+}
+let openHost = null;
+function renderOpen(host) {
+  host.replaceChildren();
+  if (!D.open.length) host.append(el("div", {class: "empty", text: "ไม่มีตัวที่ถืออยู่ — ทั้งพอร์ตเป็นเงินสด"}));
+  else host.append(el("div", {class: "card tblwrap"}, tradeTable([...D.open].sort((a, b) => b.ret - a.ret), false, pickTrade)));
+  if (D.pending.length) host.append(el("div", {class: "meta", style: "margin-top:8px",
+    text: "คำสั่งรอส่งพรุ่งนี้: " + D.pending.map(o => `${o.side === "buy" ? "ซื้อ" : "ขาย"} ${o.inst}${o.grade ? " (" + o.grade + ")" : o.reason ? " (" + o.reason + ")" : ""}`).join(" · ")}));
+}
+function renderLog(host) {
+  host.replaceChildren();
+  const val = (t, k) => k === "exit" ? (t.open ? "9999" : t.exit) : t[k];
+  const rows = [...D.trades].sort((a, b) => {
+    const x = val(a, SK), y = val(b, SK);
+    if (x == null) return 1; if (y == null) return -1;
+    return (typeof x === "string" ? x.localeCompare(y) : x - y) * SDIR || b.entry.localeCompare(a.entry);
+  });
+  if (!rows.length) { host.append(el("div", {class: "empty", text: "ยังไม่มีเทรดที่ปิดแล้ว"})); return; }
+  host.append(el("div", {class: "card tblwrap", style: "max-height:560px"}, tradeTable(rows, true, pickTrade)),
+    el("div", {class: "meta", style: "margin-top:6px", text: `${rows.length} เทรด · คลิกหัวคอลัมน์เพื่อเรียง · คลิกแถวเพื่อดูจุดซื้อขายบนกราฟราคา`}));
+}
+
+function renderRules(host) {
+  const R = D.rules;
+  const proxies = Object.entries(R.proxy).map(([a, b]) => `${a}→${b}`).join(", ");
+  const li = (k, v) => el("div", {}, el("b", {text: k + ": "}), document.createTextNode(v));
+  host.append(el("div", {class: "card"}, el("div", {class: "rules"},
+    li("เข้า", `BUY ซื้อ ${R.w_buy}% ของพอร์ต · ACCUM ซื้อ ${R.w_accum}% · ถือ ACCUM อยู่แล้วเจอ BUY → เติมให้เต็ม ${R.w_buy}%`),
+    li("ออก", `SELL → ขายหมด · REDUCE → ลด 1/3 ของไม้เต็มต่อ REDUCE รอบใหม่ · ราคาปิดต่ำกว่าต้นทุนเฉลี่ย ${R.stop_loss}% → ขายหมด · ครบ ${R.hold_bars} วันทำการ → ขายหมด`),
+    li("จำนวนตัว", `ถือพร้อมกันได้สูงสุด ${R.max_pos} ตัว · เต็มแล้วสัญญาณใหม่จะถูกข้าม (ข้ามไป ${D.skipped_count} ครั้ง)`),
+    li("ราคาซื้อขาย", `${R.execution} · ค่าธรรมเนียม ${R.cost}% ต่อฝั่ง`),
+    li("เงินทุนตั้งต้น", money(R.capital) + " · ไม่ใช้ margin · เงินสดไม่มีดอกเบี้ย"),
+    li("ดัชนี/futures", `ใช้ ETF ตัวแทน: ${proxies}` + (R.proxy_missing.length ? ` (ยังไม่มีราคาของ ${R.proxy_missing.join(", ")} → ใช้ราคาตัวต้นทางแทน)` : "")),
+    li("กติกา", `${R.version} · ใช้จริงตั้งแต่ ${R.live_since} · ราคา ${R.price_source}`),
+    li("ข้อควรระวัง", `กติกา v2 คิดขึ้นหลังเห็นข้อมูลก่อน ${R.live_since} แล้ว ผลช่วงนั้นจึงดูดีเกินจริง — ใช้ตัวเลข "ใช้จริงตั้งแต่" เป็นหลัก · stop ใช้ราคาปิด ถ้าราคา gap ลงจะขาดทุนเกิน ${R.stop_loss}% ได้`))));
+}
+
+function build() {
+  Object.keys(charts).forEach(killChart);
+  const app = document.getElementById("app"); app.replaceChildren();
+  document.getElementById("meta").textContent =
+    `${D.range[0]} → ${D.range[1]} · สัญญาณเข้า ${D.signals_seen} ครั้ง · อัปเดต ${D.generated_at}`;
+  app.append(el("div", {class: "note", text:
+    `พอร์ตจำลองที่ซื้อขายตามสัญญาณของ dashboard ด้วยกติกา ${D.rules.version} — ผลก่อน ${D.rules.live_since} เป็น backtest ที่รู้ผลแล้ว ` +
+    "ผลหลังจากนั้นคือของจริง · ใช้ดูว่าระบบทำงานอย่างไร ไม่ใช่คำแนะนำการลงทุน"}));
+  renderTiles(section("สรุป"));
+  renderEquity(section("เส้นพอร์ต", "ผลตอบแทนสะสมเทียบ S&P 500 และการถือทุกตัวเท่ากัน"));
+  openHost = section("ถืออยู่ตอนนี้", "ผลตอบแทนคิดถึงราคาปิดล่าสุด (หักค่าธรรมเนียมขายแล้ว)");
+  renderOpen(openHost);
+  pxHost = section("จุดซื้อ / จุดขาย", "เลือกตัว หรือคลิกแถวในตาราง");
+  renderPx(pxHost);
+  logHost = section("ประวัติการเทรด");
+  renderLog(logHost);
+  renderRules(section("กติกาพอร์ต"));
+}
+
+function themeLabel() {
+  document.getElementById("themeBtn").textContent =
+    document.documentElement.dataset.theme === "light" ? "🌙 โหมดมืด" : "☀️ โหมดสว่าง";
+}
+document.getElementById("themeBtn").onclick = () => {
+  const t = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem("rrg-theme", t); } catch (e) {}
+  themeLabel(); if (D) build();
+};
+themeLabel();
+
+fetch("portfolio.json?v=" + Date.now()).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then(d => { D = d; build(); })
+  .catch(e => {
+    document.getElementById("meta").textContent = "";
+    document.getElementById("app").append(el("div", {class: "err",
+      text: "โหลด portfolio.json ไม่ได้ (" + e.message + ") — workflow อาจยังไม่ได้รัน paper_portfolio.py"}));
+  });
+</script>
+</body>
+</html>
