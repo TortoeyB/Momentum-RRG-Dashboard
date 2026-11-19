@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Signal Performance — RRG Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+:root{
+  --bg:#0b0f14; --card:#11161d; --card2:#161c25; --border:#232b36;
+  --ink:#e8eaed; --ink2:#9aa4b2; --ink3:#6b7684; --accent:#f0a04b;
+  /* polarity: ชนะตลาด / แพ้ตลาด — คู่ฟ้า/ส้ม ผ่าน CVD check บนพื้น #11161d */
+  --pos:#4f8ff7; --neg:#d9772b; --grid:#1d242e;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans Thai',sans-serif;
+  font-size:15px;line-height:1.6;padding:20px clamp(12px,3vw,36px) 60px}
+.mono{font-family:'IBM Plex Mono',monospace}
+header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+h1{font-size:23px;font-weight:600}
+h1 .dot{color:var(--accent)}
+a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+.meta{color:var(--ink3);font-size:13px;margin-bottom:14px}
+h2{font-size:16px;font-weight:600;color:var(--accent);margin:28px 0 10px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+h2 .sub{color:var(--ink3);font-weight:400;font-size:13px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+.note{background:var(--card2);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:8px;
+  padding:10px 14px;font-size:13.5px;color:var(--ink2)}
+.controls{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.controls .lbl{color:var(--ink3);font-size:13px;margin-right:2px}
+.chip{background:var(--card2);border:1px solid var(--border);color:var(--ink2);border-radius:8px;
+  padding:4px 12px;font-size:13px;cursor:pointer;font-family:inherit}
+.chip.on{background:var(--accent);color:#000;border-color:var(--accent);font-weight:600}
+.chartwrap{position:relative;height:300px}
+.tblwrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{padding:7px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--grid)}
+th{color:var(--ink3);font-weight:500;font-size:12.5px;position:sticky;top:0;background:var(--card)}
+td:first-child,th:first-child{text-align:left}
+td.l,th.l{text-align:left}
+tr:hover td{background:var(--card2)}
+.pos{color:var(--pos)} .neg{color:var(--neg)} .dim{color:var(--ink3)}
+.grade{font-weight:600;font-size:12px;border-radius:20px;padding:1px 9px;border:1px solid var(--border);display:inline-block}
+.g-BUY{color:#000;background:#22c55e;border-color:#22c55e}
+.g-ACCUM{color:#22c55e;border-color:#22c55e}
+.g-WATCH{color:#60a5fa;border-color:#60a5fa}
+.g-HOLD{color:var(--ink2)}
+.g-NONE{color:var(--ink3)}
+.g-REDUCE{color:#f59e0b;border-color:#f59e0b}
+.g-SELL{color:#000;background:#ef4444;border-color:#ef4444}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+.stat .big{font-size:26px;font-weight:600;font-family:'IBM Plex Mono',monospace}
+.stat .cap{color:var(--ink2);font-size:13px}
+.stat ul{list-style:none;margin-top:8px;font-size:13px;color:var(--ink2)}
+.stat li{display:flex;justify-content:space-between;gap:10px;padding:2px 0;border-bottom:1px dashed var(--grid)}
+.stat li b{color:var(--ink);font-weight:500;font-family:'IBM Plex Mono',monospace}
+.heat td.v{font-family:'IBM Plex Mono',monospace;min-width:84px}
+.err{color:var(--neg);padding:30px 0}
+.lowN{opacity:.55}
+details{margin-top:10px} summary{cursor:pointer;color:var(--ink2);font-size:13.5px}
+details ul{margin:8px 0 0 18px;color:var(--ink2);font-size:13.5px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Signal Performance <span class="dot">·</span> RRG</h1>
+  <a href="index.html">← กลับ dashboard</a>
+</header>
+<div class="meta" id="meta">กำลังโหลด…</div>
+
+<div id="app"></div>
+
+<script>
+"use strict";
+const GR = ["BUY","ACCUM","WATCH","HOLD","NONE","REDUCE","SELL"];
+const LOW_N = 10;            // จำนวนตัวอย่างน้อยกว่านี้ = จางลง + เตือน
+let D = null, H = "20", VER = "all";
+
+const el = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v; else if (k === "text") e.textContent = v; else e.setAttribute(k, v);
+  }
+  for (const k of kids) if (k != null) e.append(k);
+  return e;
+};
+const fmt = (v, d = 2, sign = true) => v == null ? "—" : (sign && v > 0 ? "+" : "") + v.toFixed(d);
+const pctCell = (v, d = 2) => el("td", {class: "mono " + (v == null ? "dim" : v > 0 ? "pos" : v < 0 ? "neg" : ""), text: v == null ? "—" : fmt(v, d) + "%"});
+const numCell = (v, cls = "mono") => el("td", {class: cls, text: v == null ? "—" : String(v)});
+const gradePill = g => el("span", {class: "grade g-" + g, text: g === "NONE" ? "ไม่มีสัญญาณ" : g});
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+function rows() { return VER === "all" ? D.by_grade : (D.by_version[VER] || []); }
+
+function chips(label, opts, cur, onPick) {
+  const box = el("div", {class: "controls"}, el("span", {class: "lbl", text: label}));
+  for (const [val, txt] of opts) {
+    const b = el("button", {class: "chip" + (val === cur ? " on" : ""), text: txt});
+    b.onclick = () => onPick(val);
+    box.append(b);
+  }
+  return box;
+}
+
+// ---------------- 1) excess ตามเกรด ----------------
+let chart = null;
+function renderGrade(host) {
+  host.replaceChildren();
+  host.append(
+    chips("Horizon", D.params.horizons.map(h => [String(h), h + " วัน"]), H, v => { H = v; renderGrade(host); }),
+    chips("Version", [["all", "ทั้งหมด"], ...Object.keys(D.by_version).map(v => [v, v + " (" + D.version_counts[v] + ")"])], VER,
+          v => { VER = v; renderGrade(host); }));
+  const R = rows();
+  const cw = el("div", {class: "chartwrap"}, el("canvas", {id: "gc", role: "img",
+    "aria-label": "ผลตอบแทนส่วนเกินเฉลี่ยเทียบ S&P 500 แยกตามเกรดสัญญาณ"}));
+  host.append(el("div", {class: "card"}, cw));
+
+  const vals = R.map(r => r.h[H].xs), ns = R.map(r => r.h[H].n);
+  if (chart) chart.destroy();
+  const pos = css("--pos"), neg = css("--neg");
+  chart = new Chart(document.getElementById("gc"), {
+    type: "bar",
+    data: {labels: R.map((r, i) => [r.grade === "NONE" ? "ไม่มีสัญญาณ" : r.grade, "n=" + ns[i]]),
+      datasets: [{data: vals, borderRadius: 4, borderSkipped: false, maxBarThickness: 46,
+        backgroundColor: vals.map((v, i) => (v ?? 0) >= 0 ? pos : neg).map((c, i) => ns[i] < LOW_N ? c + "88" : c)}]},
+    options: {maintainAspectRatio: false, animation: false,
+      layout: {padding: {top: 22}},
+      plugins: {legend: {display: false},
+        tooltip: {callbacks: {
+          title: it => R[it[0].dataIndex].grade,
+          label: it => {
+            const r = R[it.dataIndex].h[H];
+            return [`Excess เฉลี่ย ${fmt(r.xs)}%  (median ${fmt(r.xs_med)}%)`,
+                    `ชนะตลาด ${r.hit ?? "—"}%  ·  n = ${r.n}`,
+                    `ผลตอบแทนเฉลี่ย ${fmt(r.avg)}%  ·  MAE ${fmt(r.mae)}%`];
+          }}}},
+      scales: {x: {grid: {display: false}, ticks: {color: css("--ink2")}},
+        y: {grid: {color: css("--grid")}, ticks: {color: css("--ink3"), callback: v => v + "%"},
+            title: {display: true, text: `Excess vs S&P 500 · ${H} วัน`, color: css("--ink3")}}}},
+    plugins: [{id: "labels", afterDatasetsDraw(c) {
+      const {ctx} = c; ctx.save();
+      ctx.font = "500 12px 'IBM Plex Mono', monospace"; ctx.textAlign = "center";
+      c.getDatasetMeta(0).data.forEach((bar, i) => {
+        const v = vals[i]; if (v == null) return;
+        ctx.fillStyle = css("--ink");
+        const y = v >= 0 ? bar.y - 6 : bar.y + 15;
+        ctx.fillText(fmt(v, 1) + "%", bar.x, y);
+      });
+      ctx.restore();
+    }}]
+  });
+
+  // ตาราง
+  const t = el("table", {}, el("thead", {}, el("tr", {},
+    el("th", {text: "เกรด"}), el("th", {text: "Episodes"}), el("th", {text: `n (${H}D)`}),
+    el("th", {text: "Return เฉลี่ย"}), el("th", {text: "Median"}), el("th", {text: "Excess เฉลี่ย"}),
+    el("th", {text: "Excess median"}), el("th", {text: "ชนะตลาด"}), el("th", {text: "MAE เฉลี่ย"}),
+    el("th", {text: "ถือจนสัญญาณเปลี่ยน"}), el("th", {text: "ถือเฉลี่ย (แท่ง)"}))));
+  const tb = el("tbody");
+  for (const r of R) {
+    const h = r.h[H];
+    const tr = el("tr", {class: h.n < LOW_N ? "lowN" : ""},
+      el("td", {}, gradePill(r.grade)), numCell(r.episodes), numCell(h.n),
+      pctCell(h.avg), pctCell(h.med), pctCell(h.xs), pctCell(h.xs_med),
+      numCell(h.hit == null ? null : h.hit + "%"), pctCell(h.mae),
+      pctCell(r.exit.xs), numCell(r.exit.bars));
+    tb.append(tr);
+  }
+  t.append(tb);
+  host.append(el("div", {class: "card tblwrap", style: "margin-top:10px"}, t),
+    el("div", {class: "meta", style: "margin-top:6px",
+      text: `แถวจาง = ตัวอย่างน้อยกว่า ${LOW_N} ยังสรุปไม่ได้ · "ถือจนสัญญาณเปลี่ยน" ใช้ excess และนับเฉพาะ episode ที่จบแล้ว`}));
+}
+
+// ---------------- 2) เส้นทางสัญญาณ ----------------
+function renderPaths(host) {
+  const P = D.paths, w = P.watch, b = P.buy, a = P.accum;
+  const pct = (x, n) => n ? Math.round(x / n * 100) + "%" : "—";
+  const card = (big, cap, items) => el("div", {class: "card stat"},
+    el("div", {class: "big", text: big}), el("div", {class: "cap", text: cap}),
+    el("ul", {}, ...items.map(([k, v]) => el("li", {}, el("span", {text: k}), el("b", {text: v})))));
+  host.append(el("div", {class: "cards"},
+    card(pct(w.to_accum_or_buy, w.n), `WATCH ที่ไปถึง ACCUM/BUY ภายใน ${D.params.lookahead} วัน`, [
+      ["WATCH ที่ดูได้ครบ", String(w.n)],
+      ["ไปถึง BUY", `${w.to_buy} (${pct(w.to_buy, w.n)})`],
+      ["เจอ REDUCE/SELL ก่อน", `${w.down_first} (${pct(w.down_first, w.n)})`],
+      ["ใช้เวลา (median)", w.median_lag == null ? "—" : w.median_lag + " วัน"],
+      [`ไปต่อ: excess ${D.params.main_h}D`, `${fmt(w.converted.xs)}% (n=${w.converted.n})`],
+      [`ไม่ไปต่อ: excess ${D.params.main_h}D`, `${fmt(w.not_converted.xs)}% (n=${w.not_converted.n})`]]),
+    card(pct(b.watch_before, b.n), `BUY ที่มี WATCH มาก่อน (ภายใน ${D.params.lookahead} วัน)`, [
+      ["BUY ทั้งหมด", String(b.n)],
+      ["ผ่าน ACCUM มาก่อน", `${b.accum_before} (${pct(b.accum_before, b.n)})`],
+      ["ไม่มี WATCH/ACCUM มาก่อน", String(b.neither)],
+      ...Object.entries(b.prev).map(([k, v]) => ["เกรดวันก่อนหน้า: " + k, String(v)])]),
+    card(pct(a.prev.HOLD || 0, a.n), "ACCUM ที่มาจาก HOLD (Leading อยู่แล้ว)", [
+      ["ACCUM ทั้งหมด", String(a.n)],
+      ...Object.entries(a.prev).map(([k, v]) => ["เกรดวันก่อนหน้า: " + k, String(v)])])));
+}
+
+// ---------------- 3) กลยุทธ์ ----------------
+function renderStrategies(host) {
+  const t = el("table", {}, el("thead", {}, el("tr", {},
+    el("th", {text: "กลยุทธ์"}), el("th", {class: "l", text: "วิธีเข้า"}), el("th", {text: "n"}),
+    el("th", {text: "ใช้เงินเฉลี่ย"}), el("th", {text: "Excess/เงินที่ลง"}), el("th", {text: "Median"}),
+    el("th", {text: "ชนะตลาด"}), el("th", {text: "Excess/ทั้งก้อน"}), el("th", {text: "MAE"}),
+    el("th", {text: "ได้ ≥2 ไม้"}), el("th", {text: "ครบ 3 ไม้"}))));
+  const tb = el("tbody");
+  for (const s of D.strategies) {
+    tb.append(el("tr", {class: s.n < LOW_N ? "lowN" : ""},
+      el("td", {class: "mono", text: s.key}), el("td", {class: "l", text: s.name}), numCell(s.n),
+      numCell(s.deployed == null ? null : s.deployed + "%"), pctCell(s.xs), pctCell(s.xs_med),
+      numCell(s.hit == null ? null : s.hit + "%"), pctCell(s.xs_total), pctCell(s.mae),
+      numCell(s.got_2plus == null ? null : s.got_2plus + "%"), numCell(s.got_3 == null ? null : s.got_3 + "%")));
+  }
+  t.append(tb);
+  host.append(el("div", {class: "card tblwrap"}, t),
+    el("div", {class: "meta", style: "margin-top:6px",
+      text: `ถือ ${D.params.main_h} แท่งนับจากวันเริ่ม · "ทั้งก้อน" นับเงินที่ไม่ได้ลง (C/C+) เป็นเงินสด 0% · ยังไม่หักค่าธรรมเนียม`}));
+}
+
+// ---------------- 4) รายเดือน ----------------
+function renderMonthly(host) {
+  const M = D.monthly;
+  const months = [...new Set(Object.values(M).flat().map(r => r.month))].sort();
+  const max = Math.max(1, ...Object.values(M).flat().map(r => Math.abs(r.xs ?? 0)));
+  const pos = css("--pos"), neg = css("--neg");
+  const t = el("table", {class: "heat"}, el("thead", {}, el("tr", {}, el("th", {text: "เกรด"}),
+    ...months.map(m => el("th", {text: m})))));
+  const tb = el("tbody");
+  for (const g of Object.keys(M)) {
+    const by = Object.fromEntries(M[g].map(r => [r.month, r]));
+    const tr = el("tr", {}, el("td", {}, gradePill(g)));
+    for (const m of months) {
+      const r = by[m];
+      const td = el("td", {class: "v"});
+      if (!r || r.xs == null) { td.textContent = r ? `รอ ${D.params.main_h}D` : "—"; td.className += " dim"; }
+      else {
+        td.textContent = fmt(r.xs, 1) + "%";
+        const a = Math.round(Math.min(1, Math.abs(r.xs) / max) * 0.45 * 255).toString(16).padStart(2, "0");
+        td.style.background = (r.xs >= 0 ? pos : neg) + a;
+        td.title = `n=${r.n} · ชนะตลาด ${r.hit}%`;
+        if (r.n < LOW_N) td.classList.add("lowN");
+      }
+      tr.append(td);
+    }
+    tb.append(tr);
+  }
+  t.append(tb);
+  host.append(el("div", {class: "card tblwrap"}, t),
+    el("div", {class: "meta", style: "margin-top:6px",
+      text: `Excess ${D.params.main_h}D เฉลี่ยของ episode ที่เริ่มในเดือนนั้น · ฟ้า = ชนะตลาด ส้ม = แพ้ตลาด · ชี้ที่ช่องเพื่อดูจำนวน`}));
+}
+
+// ---------------- 5) episode ล่าสุด ----------------
+let RG = "ALL";
+function renderRecent(host) {
+  host.replaceChildren();
+  host.append(chips("เกรด", [["ALL", "ทั้งหมด"], ["BUY", "BUY"], ["ACCUM", "ACCUM"], ["WATCH", "WATCH"], ["SELL", "SELL"]], RG,
+    v => { RG = v; renderRecent(host); }));
+  const t = el("table", {}, el("thead", {}, el("tr", {},
+    el("th", {text: "Symbol"}), el("th", {class: "l", text: "เกรด"}), el("th", {class: "l", text: "เริ่ม"}),
+    el("th", {class: "l", text: "ก่อนหน้า → ถัดไป"}), el("th", {text: "อยู่ในเกรด (วัน)"}),
+    el("th", {text: "Return ถึงออก/วันนี้"}), el("th", {text: "Excess"}), el("th", {class: "l", text: "สถานะ"}))));
+  const tb = el("tbody");
+  for (const r of D.recent.filter(r => RG === "ALL" || r.grade === RG)) {
+    tb.append(el("tr", {},
+      el("td", {class: "mono", text: r.sym}), el("td", {class: "l"}, gradePill(r.grade)),
+      el("td", {class: "l mono", text: r.start}),
+      el("td", {class: "l dim", text: `${r.prev ?? "—"} → ${r.next ?? "…"}`}),
+      numCell(r.days), pctCell(r.ret), pctCell(r.xs),
+      el("td", {class: "l " + (r.open ? "" : "dim"), text: r.open ? "ยังอยู่" : "จบแล้ว"})));
+  }
+  t.append(tb);
+  host.append(el("div", {class: "card tblwrap", style: "max-height:480px;overflow:auto"}, t));
+}
+
+function section(title, sub) {
+  const h = el("h2", {}, el("span", {text: title}), sub ? el("span", {class: "sub", text: sub}) : null);
+  const body = el("div");
+  document.getElementById("app").append(h, body);
+  return body;
+}
+
+fetch("performance.json?v=" + Date.now()).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then(d => {
+    D = d;
+    const P = d.params;
+    document.getElementById("meta").textContent =
+      `${d.range[0]} → ${d.range[1]} · ${d.snapshots} วัน · ${d.symbols} symbols · ${d.episodes} episodes · ` +
+      `ราคา: ${P.price_source} · อัปเดต ${d.generated_at}`;
+    const app = document.getElementById("app");
+    app.append(el("div", {class: "note",
+      text: `นับเป็น episode (สัญญาณติดกันหลายวัน = 1 ครั้ง, กลับเข้าเกรดเดิมภายใน ${P.debounce} วัน = ครั้งเดิม) · ` +
+            `เข้าที่${P.entry} · Excess = ผลตอบแทน − S&P 500 ช่วงเดียวกัน · ไม่รวมค่าธรรมเนียม · ` +
+            `ตัด VIX/yield/FX/DXY ออก · ข้อมูลยังสั้น ตัวเลขเปลี่ยนได้มากเมื่อมีตัวอย่างเพิ่ม`}));
+    renderGrade(section("ผลตามเกรดสัญญาณ", "เรียงจากฝั่งซื้อไปฝั่งขาย — ถ้าระบบดี ค่าควรลดหลั่นจากซ้ายไปขวา"));
+    renderPaths(section("เส้นทางสัญญาณ", "WATCH → ACCUM → BUY เกิดจริงแค่ไหน"));
+    renderStrategies(section("เทียบวิธีเข้า", `ถือ ${P.main_h} วัน`));
+    renderMonthly(section("ความสม่ำเสมอรายเดือน", `Excess ${P.main_h}D`));
+    renderRecent(section("Episode ล่าสุด", "60 ครั้งล่าสุดของ BUY / ACCUM / WATCH / SELL"));
+    const det = el("details", {}, el("summary", {text: "วิธีคำนวณ"}), el("ul", {},
+      el("li", {text: "สัญญาณมาจาก data/signals_log.csv (รอบแรกของแต่ละวัน) และเติมย้อนหลังจาก backup/ ก่อนเริ่มมี log"}),
+      el("li", {text: "ราคา: adjusted close จาก yfinance (ปรับ split/ปันผลแล้ว) · ช่วงที่ราคากระโดด >50% ในแท่งเดียวไม่นับ"}),
+      el("li", {text: `MAE = จุดต่ำสุดระหว่างถือเทียบราคาเข้า · ชนะตลาด = % ของ episode ที่ excess > 0`}),
+      el("li", {text: `กลยุทธ์ C: ไม้ 1 ที่วันเริ่ม WATCH, ไม้ 2–3 ที่วันแรกของ ACCUM/BUY ภายใน ${P.lookahead} วัน แล้วปิดพร้อมกันที่วันที่ ${P.main_h}`}),
+      el("li", {text: "Version: v1 = ก่อน 4 ส.ค. 2026 · v1.1 = ส.ค.–19 พ.ย. · v1.2 = หลังแก้แท่งที่ตลาดยังไม่ปิด"})));
+    app.append(det);
+  })
+  .catch(e => {
+    document.getElementById("meta").textContent = "";
+    document.getElementById("app").append(el("div", {class: "err",
+      text: "โหลด performance.json ไม่ได้ (" + e.message + ") — workflow อาจยังไม่ได้รัน track_performance.py"}));
+  });
+</script>
+</body>
+</html>
