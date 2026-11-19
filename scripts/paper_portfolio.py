@@ -5,11 +5,14 @@ paper_portfolio.py — พอร์ตจำลองที่เทรดตา
     python scripts/paper_portfolio.py              # ราคาจาก yfinance (ใช้ cache ของ run_daily)
     python scripts/paper_portfolio.py --offline    # ราคาจาก px_hist ใน backup/ (ทดสอบ)
 
-กติกา baseline (ตกลงกันไว้ 2026-11-19 — "ตั้งครั้งเดียว ไม่จูนตามผล"):
+กติกา v2 (ใช้จริงตั้งแต่ 2026-11-20 · ช่วงก่อนหน้านั้นคือผลย้อนหลังที่รู้ผลแล้ว):
   เข้า   BUY = ไม้เต็ม (10% ของพอร์ต) · ACCUM = ครึ่งไม้ (5%)
          ถือ ACCUM อยู่แล้วเจอ BUY → เติมอีก 5% ให้เต็มไม้  (ทยอยซื้อ)
          เข้าเฉพาะวันแรกของ episode (ไม่ไล่ซื้อสัญญาณเดิมซ้ำ) · WATCH ไม่เข้า
-  ออก   ครบ HOLD_BARS แท่ง หรือ symbol ต้นทางขึ้น SELL/REDUCE — แล้วแต่อย่างไหนก่อน
+  ออก   SELL → ขายหมด · REDUCE → ลด 1/3 ของไม้เต็มต่อ REDUCE รอบใหม่ (ทยอยขาย)
+         ราคาปิดต่ำกว่าต้นทุนเฉลี่ย 8% → ขายหมด (stop loss) · ครบ HOLD_BARS แท่ง → ขายหมด
+  ประวัติ  baseline-1 (REDUCE ขายหมด, ไม่มี stop) ใช้ 19 พ.ย. 2026 วันเดียว — เปลี่ยนเป็น v2 หลังทดสอบ
+         v2 ถูกคิดขึ้นหลังเห็นข้อมูล ก.ค.–พ.ย. แล้ว ผลช่วงนั้นจึงดูดีเกินจริง ให้ดูผลหลัง LIVE_SINCE
   ขนาด  ถือพร้อมกันได้ MAX_POS ตัว · เงินที่เหลือ = เงินสด 0% · ไม่ใช้ margin
   ราคา  ส่งคำสั่ง = ราคาปิด "แท่งถัดไป" หลังแท่งที่เกิดสัญญาณ (สัญญาณคำนวณหลังตลาดปิด
          จึงซื้อที่ราคาปิดของแท่งนั้นเองไม่ได้จริง) · ค่าธรรมเนียม COST ต่อฝั่ง
@@ -41,8 +44,11 @@ W_BUY = 0.10
 W_ACCUM = 0.05
 HOLD_BARS = 20
 EXIT_GRADES = {"SELL", "REDUCE"}
+REDUCE_FRAC = 1 / 3    # REDUCE ขายกี่ส่วนของไม้เต็ม (1.0 = ขายหมด · 1/3 = ลดทีละ 1/3 ต่อ REDUCE episode)
+STOP_LOSS = 0.08       # ราคาปิดต่ำกว่าต้นทุนเฉลี่ย 8% → ขายหมดที่ราคาปิดนั้น · None = ไม่มี
+LIVE_SINCE = "2026-11-20"   # วันแรกที่ใช้กติกานี้จริง — ผลก่อนวันนี้คือ backtest ที่รู้ผลแล้ว
 COST = 0.0015
-RULES_VERSION = "baseline-1"
+RULES_VERSION = "v2"
 
 PROXY = {
     "^GSPC": "SPY", "^IXIC": "QQQ", "NDX": "QQQ", "^NDX": "QQQ", "^DJI": "DIA", "^RUT": "IWM",
@@ -89,19 +95,31 @@ class Book:
             p["grade"] = "ACCUM→BUY"
             p["cost"] += value * (1 + COST)
             p["units"] += units
+            p["units0"] = p["units"]
             p["adds"].append({"date": d.strftime("%Y-%m-%d"), "px": _r(price, 4), "grade": meta["grade"]})
         else:
-            self.pos[inst] = {"units": units, "cost": value * (1 + COST), "entry": d, "entry_px": price,
+            self.pos[inst] = {"units": units, "units0": units, "cost": value * (1 + COST), "entry": d, "entry_px": price,
                               "sym": meta["sym"], "grade": meta["grade"], "bars": 0,
                               "adds": [{"date": d.strftime("%Y-%m-%d"), "px": _r(price, 4), "grade": meta["grade"]}]}
         return True
 
-    def sell(self, inst, d, reason):
-        p = self.pos.pop(inst)
+    def sell(self, inst, d, reason, frac=1.0):
+        """frac < 1 = ขายบางส่วน (สัดส่วนของไม้เต็ม units0) · บันทึกเป็นเทรดแยกตามสัดส่วนต้นทุน"""
+        p = self.pos[inst]
         price = self.px(inst, d)
-        proceeds = p["units"] * price * (1 - COST)
+        units = p["units"] if frac >= 1 else min(p["units"], p["units0"] * frac)
+        if units >= p["units"] * 0.999:
+            units = p["units"]
+        part = units / p["units"]
+        proceeds = units * price * (1 - COST)
         self.cash += proceeds
-        self.trades.append(self._trade_row(inst, p, d, price, proceeds, reason, open_=False))
+        sold = {**p, "units": units, "cost": p["cost"] * part}
+        self.trades.append(self._trade_row(inst, sold, d, price, proceeds, reason, open_=False))
+        if part >= 1:
+            self.pos.pop(inst)
+        else:
+            p["units"] -= units
+            p["cost"] -= sold["cost"]
 
     def _trade_row(self, inst, p, d, price, value, reason, open_):
         return {"sym": p["sym"], "inst": inst, "grade": p["grade"],
@@ -149,12 +167,17 @@ def simulate(log: pd.DataFrame, prices: dict[str, pd.Series]):
                 p["bars"] += 1
                 if p["bars"] >= HOLD_BARS:
                     book.sell(inst, d, f"ครบ {HOLD_BARS} วัน")
+                    continue
+            if STOP_LOSS and d in s.index and d > p["entry"]:
+                avg = p["cost"] / p["units"] / (1 + COST)
+                if s.loc[d] <= avg * (1 - STOP_LOSS):
+                    book.sell(inst, d, f"stop −{STOP_LOSS * 100:.0f}%")
         # ---- 2) คำสั่งที่ถึงวันส่ง (ขายก่อน ซื้อทีหลัง) ----
         due = [o for o in pending if o["date"] == d]
         pending = [o for o in pending if o["date"] != d]
         for o in sorted(due, key=lambda o: o["side"] != "sell"):
             if o["side"] == "sell" and o["inst"] in book.pos:
-                book.sell(o["inst"], d, o["reason"])
+                book.sell(o["inst"], d, o["reason"], o.get("frac", 1.0))
             elif o["side"] == "buy":
                 held = o["inst"] in book.pos
                 if held and not o.get("topup"):
@@ -174,10 +197,18 @@ def simulate(log: pd.DataFrame, prices: dict[str, pd.Series]):
         # 4a ออกตามสัญญาณ
         for inst, p in list(book.pos.items()):
             g = grade_at.get((p["sym"], d))
+            prev_g, p["last_g"] = p.get("last_g"), g
+            frac = 1.0
+            if g == "REDUCE" and REDUCE_FRAC < 1:
+                if prev_g == "REDUCE":
+                    continue                    # ลดไปแล้วใน REDUCE รอบนี้ — รอ REDUCE รอบใหม่
+                frac = REDUCE_FRAC
             if g in EXIT_GRADES and not any(o["inst"] == inst and o["side"] == "sell" for o in pending):
+                # แท่งถัดไปยังไม่มีราคา (เช่นตลาดยังไม่ปิด) → เก็บเป็นคำสั่งรอส่ง date=None ไว้แสดงบนหน้าเว็บ
+                # รอบถัดไปจำลองใหม่ทั้งหมดอยู่แล้ว จึงจะได้วันส่งจริงเมื่อมีราคาแท่งนั้น
                 nb = next_bar(prices[inst], bar_of.get((p["sym"], d), d))
-                if nb is not None:
-                    pending.append({"date": nb, "side": "sell", "inst": inst, "reason": f"สัญญาณ {g}"})
+                pending.append({"date": nb, "side": "sell", "inst": inst, "frac": frac,
+                                "reason": f"สัญญาณ {g}" + (" (ลด 1/3)" if frac < 1 else "")})
         # 4b เข้าใหม่ — BUY ก่อน ACCUM, คะแนนสูงก่อน
         if d in ent_by_day:
             todo = ent_by_day[d].assign(pri=lambda x: (x.grade != "BUY").astype(int))
@@ -188,9 +219,7 @@ def simulate(log: pd.DataFrame, prices: dict[str, pd.Series]):
                     continue
                 if any(o["inst"] == r.inst and o["side"] == "buy" for o in pending):
                     continue
-                nb = next_bar(prices[r.inst], r.entry_date)
-                if nb is None:
-                    continue
+                nb = next_bar(prices[r.inst], r.entry_date)       # None = รอแท่งถัดไป (แสดงเป็นคำสั่งรอส่ง)
                 w = W_BUY if r.grade == "BUY" else W_ACCUM
                 if topup:
                     w = W_BUY - W_ACCUM
@@ -202,7 +231,11 @@ def simulate(log: pd.DataFrame, prices: dict[str, pd.Series]):
     for inst, p in book.pos.items():
         price = book.px(inst, last)
         open_rows.append(book._trade_row(inst, p, last, price, p["units"] * price * (1 - COST), "ยังถืออยู่", True))
-    pending_rows = [{"date": o["date"].strftime("%Y-%m-%d"), "side": o["side"], "inst": o["inst"],
+    for inst, p in book.pos.items():                     # ถือครบกำหนดในแท่งถัดไป
+        if p["bars"] == HOLD_BARS - 1 and not any(o["inst"] == inst and o["side"] == "sell" for o in pending):
+            pending.append({"date": None, "side": "sell", "inst": inst, "reason": f"ครบ {HOLD_BARS} วัน"})
+    pending_rows = [{"date": o["date"].strftime("%Y-%m-%d") if o["date"] is not None else None,
+                     "side": o["side"], "inst": o["inst"],
                      **({"sym": o["meta"]["sym"], "grade": o["meta"]["grade"]} if "meta" in o else {"reason": o["reason"]})}
                     for o in pending]
     return pd.DataFrame(curve).set_index("d"), book.trades, open_rows, pending_rows, skipped, cal, ent
@@ -307,16 +340,28 @@ def main():
         px_out[inst] = {"d": [x.strftime("%Y-%m-%d") for x in s.index], "c": [_r(v, 4) for v in s.values]}
 
     pf_stats = stats(pf, trades, curve["invested"])
+    # ผลนับจากวันที่เริ่มใช้กติกาจริง (ฐาน = มูลค่า ณ วันทำการก่อน LIVE_SINCE)
+    live = None
+    base_idx = [d for d in pf.index if d < LIVE_SINCE]
+    if base_idx and pf.index[-1] >= LIVE_SINCE:
+        b = base_idx[-1]
+        bs = spx.loc[pd.Timestamp(b)]
+        live = {"base_date": b, "days": int(sum(1 for d in pf.index if d >= LIVE_SINCE)),
+                "ret": _r((pf.iloc[-1] / pf.loc[b] - 1) * 100),
+                "spx": _r((spx.iloc[-1] / bs - 1) * 100),
+                "trades": int(sum(1 for t in trades if t["exit"] >= LIVE_SINCE))}
     out = {
         "generated_at": pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%dT%H:%MZ"),
         "range": [cal[0].strftime("%Y-%m-%d"), cal[-1].strftime("%Y-%m-%d")],
         "rules": {"version": RULES_VERSION, "capital": START_CAPITAL, "max_pos": MAX_POS,
                   "w_buy": W_BUY * 100, "w_accum": W_ACCUM * 100, "hold_bars": HOLD_BARS,
                   "exit_grades": sorted(EXIT_GRADES), "cost": COST * 100,
+                  "reduce_frac": _r(REDUCE_FRAC, 4), "stop_loss": _r(STOP_LOSS * 100, 1) if STOP_LOSS else None,
+                  "live_since": LIVE_SINCE,
                   "execution": "ราคาปิดแท่งถัดไปหลังเกิดสัญญาณ", "proxy": PROXY,
                   "proxy_missing": sorted(set(proxy_missing)),
                   "price_source": "backup px_hist" if offline else "yfinance (adjusted close)"},
-        "stats": {"portfolio": pf_stats,
+        "stats": {"portfolio": pf_stats, "live": live,
                   "spx": {"ret": _r((spx.iloc[-1] / spx.iloc[0] - 1) * 100),
                           "max_dd": _r((spx / spx.cummax() - 1).min() * 100)},
                   "ew": {"ret": _r((ew.iloc[-1] / ew.iloc[0] - 1) * 100),
