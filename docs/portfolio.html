@@ -140,11 +140,13 @@ function renderTiles(host) {
   const tile = (k, v, s, cls = "") => el("div", {class: "tile"}, el("div", {class: "k", text: k}),
     el("div", {class: "v " + cls, text: v}), s ? el("div", {class: "s", text: s}) : null);
   const sign = v => v == null ? "" : v > 0 ? "pos" : v < 0 ? "neg" : "";
+  const L = S.live, since = D.rules.live_since;
   host.append(el("div", {class: "tiles"},
-    tile("พอร์ตจำลอง", fmt(P.ret) + "%", `S&P 500 ${fmt(S.spx.ret)}% · EW ${fmt(S.ew.ret)}%`, sign(P.ret)),
-    tile("ชนะ S&P 500", fmt(P.ret - S.spx.ret) + "%", "ส่วนต่างผลตอบแทนสะสม", sign(P.ret - S.spx.ret)),
+    L ? tile(`ใช้จริงตั้งแต่ ${since}`, fmt(L.ret) + "%", `S&P 500 ${fmt(L.spx)}% · ${L.days} วัน · ขาย ${L.trades} ครั้ง`, sign(L.ret))
+      : tile(`ใช้จริงตั้งแต่ ${since}`, "รอข้อมูล", "เริ่มนับจากวันทำการแรก", ""),
+    tile("ทั้งช่วง (รวม backtest)", fmt(P.ret) + "%", `S&P 500 ${fmt(S.spx.ret)}% · EW ${fmt(S.ew.ret)}% · ชนะ S&P ${fmt(P.ret - S.spx.ret)}%`, sign(P.ret)),
     tile("Max drawdown", fmt(P.max_dd) + "%", `S&P ${fmt(S.spx.max_dd)}% · EW ${fmt(S.ew.max_dd)}%`),
-    tile("เทรดที่ปิดแล้ว", String(P.trades), `ชนะ ${P.win_rate ?? "—"}% · ถือเฉลี่ย ${P.avg_bars ?? "—"} วัน`),
+    tile("รายการขาย", String(P.trades), `กำไร ${P.win_rate ?? "—"}% · ถือเฉลี่ย ${P.avg_bars ?? "—"} วัน · นับขายบางส่วนแยก`),
     tile("ต่อเทรด", fmt(P.avg_trade) + "%", `ชนะเฉลี่ย ${fmt(P.avg_win)}% · แพ้เฉลี่ย ${fmt(P.avg_loss)}%`, sign(P.avg_trade)),
     tile("Profit factor", P.profit_factor == null ? "—" : P.profit_factor.toFixed(2), "กำไรรวม ÷ ขาดทุนรวม"),
     tile("ลงทุนเฉลี่ย", (P.exposure ?? "—") + "%", "ที่เหลือเป็นเงินสด 0%")));
@@ -160,7 +162,7 @@ function renderEquity(host) {
     ["ew", "ถือทุกตัวเท่ากัน (EW)", css("--s-ew"), true, 2]];
   host.append(el("div", {class: "legend"}, ...series.map(([, n, c, dash]) =>
     el("span", {class: "key"}, el("span", {class: "ln" + (dash ? " dash" : ""), style: `border-top-color:${c}`}), el("span", {text: n})))));
-  const cv1 = el("canvas", {role: "img", "aria-label": "ผลตอบแทนสะสมของพอร์ตจำลองเทียบ S&P 500"});
+  const cv1 = el("canvas", {role: "img", "aria-label": "ผลตอบแทนสะสมของพอร์ตจำลองเทียบ S&P 500", "data-labelled": "1"});
   const cv2 = el("canvas", {role: "img", "aria-label": "Drawdown ของพอร์ตจำลองเทียบ S&P 500"});
   host.append(el("div", {class: "card"}, el("div", {class: "chartbox"}, cv1),
     el("div", {class: "meta", style: "margin:10px 0 4px", text: "Drawdown — ลดลงจากจุดสูงสุดเดิม"}),
@@ -175,7 +177,7 @@ function renderEquity(host) {
         label: c => ` ${c.dataset.label}  ${fmt(c.raw)}%`,
         afterBody: it => { const r = C[it[0].dataIndex]; return [`ลงทุนอยู่ ${r.inv}% · ${r.n} ตัว`]; }}}},
       scales: {x: xTime(), y: axis("ผลตอบแทนสะสม", v => v + "%")}},
-    plugins: [crosshair]});
+    plugins: [liveLine, crosshair]});
   const dd = k => { let pk = -Infinity; return C.map(r => { pk = Math.max(pk, r[k]); return (r[k] / pk - 1) * 100; }); };
   charts.dd = new Chart(cv2, {type: "line",
     data: {labels, datasets: [
@@ -184,8 +186,24 @@ function renderEquity(host) {
     options: {maintainAspectRatio: false, animation: false, interaction: {mode: "index", intersect: false},
       plugins: {legend: {display: false}, tooltip: {...tipStyle(), callbacks: {label: c => ` ${c.dataset.label}  ${c.raw.toFixed(2)}%`}}},
       scales: {x: xTime(), y: axis(null, v => v + "%")}},
-    plugins: [crosshair]});
+    plugins: [liveLine, crosshair]});
 }
+// เส้นแบ่ง: ก่อนหน้า = backtest ที่รู้ผลแล้ว · หลัง = ใช้จริง
+const liveLine = {id: "live", afterDatasetsDraw(c) {
+  const since = D.rules.live_since, labels = c.data.labels;
+  let i = labels.findIndex(d => d >= since);
+  const {ctx, chartArea: a, scales: {x}} = c;
+  const px = i >= 0 ? x.getPixelForValue(i) : a.right;
+  ctx.save();
+  ctx.fillStyle = css("--ink3") + "14"; ctx.fillRect(a.left, a.top, px - a.left, a.bottom - a.top);
+  ctx.strokeStyle = css("--accent"); ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
+  ctx.beginPath(); ctx.moveTo(px, a.top); ctx.lineTo(px, a.bottom); ctx.stroke();
+  if (c.canvas.dataset.labelled) {
+    ctx.setLineDash([]); ctx.font = "500 13px 'IBM Plex Sans Thai', sans-serif"; ctx.fillStyle = css("--ink2");
+    ctx.textAlign = "right"; ctx.fillText("◀ backtest (รู้ผลแล้ว)", px - 8, a.top + 16);
+    ctx.textAlign = "left"; ctx.fillStyle = css("--accent"); ctx.fillText("ใช้จริง ▶", px + 8, a.top + 16);
+  }
+  ctx.restore(); }};
 const crosshair = {id: "xh", afterDatasetsDraw(c) {
   const a = c.tooltip && c.tooltip.getActiveElements(); if (!a || !a.length) return;
   const x = a[0].element.x, {top, bottom} = c.chartArea, ctx = c.ctx;
@@ -310,12 +328,13 @@ function renderRules(host) {
   const li = (k, v) => el("div", {}, el("b", {text: k + ": "}), document.createTextNode(v));
   host.append(el("div", {class: "card"}, el("div", {class: "rules"},
     li("เข้า", `BUY ซื้อ ${R.w_buy}% ของพอร์ต · ACCUM ซื้อ ${R.w_accum}% · ถือ ACCUM อยู่แล้วเจอ BUY → เติมให้เต็ม ${R.w_buy}%`),
-    li("ออก", `ครบ ${R.hold_bars} วันทำการ หรือสัญญาณต้นทางเป็น ${R.exit_grades.join("/")} (แล้วแต่อย่างไหนก่อน)`),
+    li("ออก", `SELL → ขายหมด · REDUCE → ลด 1/3 ของไม้เต็มต่อ REDUCE รอบใหม่ · ราคาปิดต่ำกว่าต้นทุนเฉลี่ย ${R.stop_loss}% → ขายหมด · ครบ ${R.hold_bars} วันทำการ → ขายหมด`),
     li("จำนวนตัว", `ถือพร้อมกันได้สูงสุด ${R.max_pos} ตัว · เต็มแล้วสัญญาณใหม่จะถูกข้าม (ข้ามไป ${D.skipped_count} ครั้ง)`),
     li("ราคาซื้อขาย", `${R.execution} · ค่าธรรมเนียม ${R.cost}% ต่อฝั่ง`),
     li("เงินทุนตั้งต้น", money(R.capital) + " · ไม่ใช้ margin · เงินสดไม่มีดอกเบี้ย"),
     li("ดัชนี/futures", `ใช้ ETF ตัวแทน: ${proxies}` + (R.proxy_missing.length ? ` (ยังไม่มีราคาของ ${R.proxy_missing.join(", ")} → ใช้ราคาตัวต้นทางแทน)` : "")),
-    li("กติกา", `${R.version} · ตั้งไว้ครั้งเดียวไม่จูนตามผล · ราคา ${R.price_source}`))));
+    li("กติกา", `${R.version} · ใช้จริงตั้งแต่ ${R.live_since} · ราคา ${R.price_source}`),
+    li("ข้อควรระวัง", `กติกา v2 คิดขึ้นหลังเห็นข้อมูลก่อน ${R.live_since} แล้ว ผลช่วงนั้นจึงดูดีเกินจริง — ใช้ตัวเลข "ใช้จริงตั้งแต่" เป็นหลัก · stop ใช้ราคาปิด ถ้าราคา gap ลงจะขาดทุนเกิน ${R.stop_loss}% ได้`))));
 }
 
 function build() {
@@ -324,8 +343,8 @@ function build() {
   document.getElementById("meta").textContent =
     `${D.range[0]} → ${D.range[1]} · สัญญาณเข้า ${D.signals_seen} ครั้ง · อัปเดต ${D.generated_at}`;
   app.append(el("div", {class: "note", text:
-    "พอร์ตจำลองที่ซื้อขายตามสัญญาณของ dashboard ด้วยกติกาตายตัว (ไม่ได้ optimize) — ใช้ดูว่าระบบทำงานอย่างไร " +
-    "ไม่ใช่คำแนะนำการลงทุน · ข้อมูลยังสั้น ผลเปลี่ยนได้มาก"}));
+    `พอร์ตจำลองที่ซื้อขายตามสัญญาณของ dashboard ด้วยกติกา ${D.rules.version} — ผลก่อน ${D.rules.live_since} เป็น backtest ที่รู้ผลแล้ว ` +
+    "ผลหลังจากนั้นคือของจริง · ใช้ดูว่าระบบทำงานอย่างไร ไม่ใช่คำแนะนำการลงทุน"}));
   renderTiles(section("สรุป"));
   renderEquity(section("เส้นพอร์ต", "ผลตอบแทนสะสมเทียบ S&P 500 และการถือทุกตัวเท่ากัน"));
   openHost = section("ถืออยู่ตอนนี้", "ผลตอบแทนคิดถึงราคาปิดล่าสุด (หักค่าธรรมเนียมขายแล้ว)");
