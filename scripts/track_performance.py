@@ -380,7 +380,7 @@ def monthly(E: pd.DataFrame) -> dict:
     return out
 
 
-def recent(E: pd.DataFrame, px: Px, n: int = 60) -> list[dict]:
+def recent(E: pd.DataFrame, px: Px, n: int = 150) -> list[dict]:
     d = E[E.grade.isin(["BUY", "ACCUM", "WATCH", "SELL"])].sort_values("start", ascending=False).head(n)
     out = []
     for r in d.itertuples():
