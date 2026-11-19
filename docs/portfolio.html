@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Paper Portfolio — RRG Dashboard</title>
+<title>RRG Momentum Portfolio Performance</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
@@ -92,7 +92,7 @@ tbody tr.sel td{background:var(--card2);box-shadow:inset 3px 0 0 var(--accent)}
 <body>
 
 <header>
-  <h1>Paper Portfolio <span class="dot">·</span> RRG</h1>
+  <h1>Momentum Portfolio <span class="dot">·</span> RRG</h1>
   <div class="hdr-actions">
     <a class="hdr-btn accent" href="index.html">← Dashboard</a>
     <a class="hdr-btn" href="performance.html">📈 Signal Performance</a>
@@ -119,6 +119,8 @@ const fmt = (v, d = 2) => v == null ? "—" : (v > 0 ? "+" : "") + v.toFixed(d);
 const pctTd = v => el("td", {class: "mono " + (v == null ? "dim" : v > 0 ? "pos" : v < 0 ? "neg" : ""), text: v == null ? "—" : fmt(v) + "%"});
 const td = (t, cls = "mono") => el("td", {class: cls, text: t == null ? "—" : String(t)});
 const pill = g => el("span", {class: "grade g-" + g, text: g});
+// ชื่อกติกาพอร์ตที่แสดง — "v2" ในไฟล์ข้อมูล → "กติกาพอร์ต ชุดที่ 2" (ไม่ให้ชนกับเวอร์ชันสัญญาณ v1.x)
+const rulesName = v => /^v(\d+)$/.test(v || "") ? "กติกาพอร์ต ชุดที่ " + v.slice(1) : (v || "—");
 const money = v => v == null ? "—" : (v < 0 ? "−" : "") + Math.abs(v).toLocaleString("en-US", {maximumFractionDigits: 0});
 
 function section(title, sub) {
@@ -333,8 +335,8 @@ function renderRules(host) {
     li("ราคาซื้อขาย", `${R.execution} · ค่าธรรมเนียม ${R.cost}% ต่อฝั่ง`),
     li("เงินทุนตั้งต้น", money(R.capital) + " · ไม่ใช้ margin · เงินสดไม่มีดอกเบี้ย"),
     li("ดัชนี/futures", `ใช้ ETF ตัวแทน: ${proxies}` + (R.proxy_missing.length ? ` (ยังไม่มีราคาของ ${R.proxy_missing.join(", ")} → ใช้ราคาตัวต้นทางแทน)` : "")),
-    li("กติกา", `${R.version} · ใช้จริงตั้งแต่ ${R.live_since} · ราคา ${R.price_source}`),
-    li("ข้อควรระวัง", `กติกา v2 คิดขึ้นหลังเห็นข้อมูลก่อน ${R.live_since} แล้ว ผลช่วงนั้นจึงดูดีเกินจริง — ใช้ตัวเลข "ใช้จริงตั้งแต่" เป็นหลัก · stop ใช้ราคาปิด ถ้าราคา gap ลงจะขาดทุนเกิน ${R.stop_loss}% ได้`))));
+    li("กติกา", `${rulesName(R.version)} · ใช้จริงตั้งแต่ ${R.live_since} · ราคา ${R.price_source}`),
+    li("ข้อควรระวัง", `${rulesName(R.version)} คิดขึ้นหลังเห็นข้อมูลก่อน ${R.live_since} แล้ว ผลช่วงนั้นจึงดูดีเกินจริง — ใช้ตัวเลข "ใช้จริงตั้งแต่" เป็นหลัก · stop ใช้ราคาปิด ถ้าราคา gap ลงจะขาดทุนเกิน ${R.stop_loss}% ได้`))));
 }
 
 function build() {
@@ -343,7 +345,7 @@ function build() {
   document.getElementById("meta").textContent =
     `${D.range[0]} → ${D.range[1]} · สัญญาณเข้า ${D.signals_seen} ครั้ง · อัปเดต ${D.generated_at}`;
   app.append(el("div", {class: "note", text:
-    `พอร์ตจำลองที่ซื้อขายตามสัญญาณของ dashboard ด้วยกติกา ${D.rules.version} — ผลก่อน ${D.rules.live_since} เป็น backtest ที่รู้ผลแล้ว ` +
+    `พอร์ตจำลองที่ซื้อขายตามสัญญาณของ dashboard ด้วย${rulesName(D.rules.version)} — ผลก่อน ${D.rules.live_since} เป็น backtest ที่รู้ผลแล้ว ` +
     "ผลหลังจากนั้นคือของจริง · ใช้ดูว่าระบบทำงานอย่างไร ไม่ใช่คำแนะนำการลงทุน"}));
   renderTiles(section("สรุป"));
   renderEquity(section("เส้นพอร์ต", "ผลตอบแทนสะสมเทียบ S&P 500 และการถือทุกตัวเท่ากัน"));

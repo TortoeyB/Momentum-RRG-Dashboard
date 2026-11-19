@@ -92,7 +92,7 @@ details ul{margin:8px 0 0 18px;color:var(--ink2);font-size:14.5px}
   <h1>Signal Performance <span class="dot">·</span> RRG</h1>
   <div class="hdr-actions">
     <a class="hdr-btn accent" href="index.html">← กลับ dashboard</a>
-    <a class="hdr-btn" href="portfolio.html">💼 Paper Portfolio</a>
+    <a class="hdr-btn" href="portfolio.html">💼 Momentum Portfolio</a>
     <button class="hdr-btn" id="themeBtn" type="button" aria-label="สลับโหมดสว่าง/มืด"></button>
   </div>
 </header>
@@ -105,6 +105,12 @@ details ul{margin:8px 0 0 18px;color:var(--ink2);font-size:14.5px}
 const GR = ["BUY","ACCUM","WATCH","HOLD","NONE","REDUCE","SELL"];
 const LOW_N = 10;            // จำนวนตัวอย่างน้อยกว่านี้ = จางลง + เตือน
 let D = null, H = "20", VER = "all";
+// วิธีคำนวณสัญญาณ (scoring.py) แต่ละเวอร์ชัน — ไม่เกี่ยวกับกติกาของพอร์ต
+const SIG_VER_TIPS = {
+  all: "รวมสัญญาณทุกเวอร์ชัน",
+  "v1": "ก่อน 4 ส.ค. 2026 — ช่วงแรก ยังมี symbol บางตัว map ผิด",
+  "v1.1": "ส.ค. – 19 พ.ย. 2026 — ADX ต่อเนื่อง, MA แบบ graded, bar_shock veto, ปรับ split",
+  "v1.2": "ตั้งแต่ 19 พ.ย. 2026 — ตัดแท่งที่ตลาดยังไม่ปิด (crypto/futures/FX/VIX/เอเชีย)"};
 
 const el = (tag, attrs = {}, ...kids) => {
   const e = document.createElement(tag);
@@ -122,10 +128,11 @@ const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).
 
 function rows() { return VER === "all" ? D.by_grade : (D.by_version[VER] || []); }
 
-function chips(label, opts, cur, onPick) {
+function chips(label, opts, cur, onPick, tips = {}) {
   const box = el("div", {class: "controls"}, el("span", {class: "lbl", text: label}));
   for (const [val, txt] of opts) {
     const b = el("button", {class: "chip" + (val === cur ? " on" : ""), text: txt});
+    if (tips[val]) b.title = tips[val];
     b.onclick = () => onPick(val);
     box.append(b);
   }
@@ -138,8 +145,8 @@ function renderGrade(host) {
   host.replaceChildren();
   host.append(
     chips("Horizon", D.params.horizons.map(h => [String(h), h + " วัน"]), H, v => { H = v; renderGrade(host); }),
-    chips("Version", [["all", "ทั้งหมด"], ...Object.keys(D.by_version).map(v => [v, v + " (" + D.version_counts[v] + ")"])], VER,
-          v => { VER = v; renderGrade(host); }));
+    chips("เวอร์ชันสัญญาณ", [["all", "ทั้งหมด"], ...Object.keys(D.by_version).map(v => [v, v + " (" + D.version_counts[v] + ")"])], VER,
+          v => { VER = v; renderGrade(host); }, SIG_VER_TIPS));
   const R = rows();
   const cw = el("div", {class: "chartwrap"}, el("canvas", {id: "gc", role: "img",
     "aria-label": "ผลตอบแทนส่วนเกินเฉลี่ยเทียบ S&P 500 แยกตามเกรดสัญญาณ"}));
@@ -386,7 +393,7 @@ function build() {
       el("li", {text: "ราคา: adjusted close จาก yfinance (ปรับ split/ปันผลแล้ว) · ช่วงที่ราคากระโดด >50% ในแท่งเดียวไม่นับ"}),
       el("li", {text: `MAE = จุดต่ำสุดระหว่างถือเทียบราคาเข้า · ชนะตลาด = % ของ episode ที่ excess > 0`}),
       el("li", {text: `กลยุทธ์ C: ไม้ 1 ที่วันเริ่ม WATCH, ไม้ 2–3 ที่วันแรกของ ACCUM/BUY ภายใน ${P.lookahead} วัน แล้วปิดพร้อมกันที่วันที่ ${P.main_h}`}),
-      el("li", {text: "Version: v1 = ก่อน 4 ส.ค. 2026 · v1.1 = ส.ค.–19 พ.ย. · v1.2 = หลังแก้แท่งที่ตลาดยังไม่ปิด"})));
+      el("li", {text: "เวอร์ชันสัญญาณ = วิธีคำนวณสัญญาณ (ไม่ใช่กติกาพอร์ต): v1 = ก่อน 4 ส.ค. 2026 · v1.1 = ส.ค.–19 พ.ย. · v1.2 = หลังแก้แท่งที่ตลาดยังไม่ปิด · ชี้ที่ปุ่มเพื่อดูรายละเอียด"})));
     app.append(det);
 }
 </script>
