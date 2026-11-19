@@ -38,6 +38,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # checkout ได้ commit ที่ "สั่งรัน" ซึ่งอาจเก่าแล้ว ถ้าระหว่างรอคิวมีรอบอื่น push ข้อมูลไปก่อน
+      # (เคส 19 พ.ย. 2026: อัปโหลดไฟล์ติดกัน 3 commit → รอบหลังเริ่มจาก commit เก่า
+      #  แล้ว rebase ชนกันที่ data.json/backup จน push ไม่ผ่าน 3 ครั้ง — re-run ก็พังซ้ำ)
+      # ไฟล์ที่ workflow นี้เขียนเป็นของที่สร้างใหม่ทั้งหมด จึงเริ่มจาก main ล่าสุดได้เสมอ
+      - name: Sync to latest main
+        run: |
+          git fetch --depth 1 origin main
+          git reset --hard origin/main
+          git log -1 --format='เริ่มจาก %h %s'
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -61,11 +71,15 @@ jobs:
         run: |
           git config user.name "rrg-bot"
           git config user.email "actions@github.com"
-          git add docs/data.json backup/ data/names.json
-          # ไฟล์ของ tracker อาจยังไม่มี (เช่นรอบที่ track_performance ล้ม) — ห้ามทำให้ commit พัง
-          for f in docs/performance.json data/signals_log.csv; do
-            if [ -f "$f" ]; then git add "$f"; fi
-          done
+          # ไฟล์ที่ pipeline สร้าง (ของ tracker อาจไม่มีถ้า track_performance ล้ม — ห้ามทำให้ commit พัง)
+          GEN="docs/data.json docs/performance.json data/names.json data/signals_log.csv"
+          stage() {
+            git add backup/
+            for f in $GEN; do
+              if [ -f "$f" ]; then git add "$f"; fi
+            done
+          }
+          stage
           if git diff --cached --quiet; then
             echo "ไม่มีอะไรเปลี่ยน — ข้าม commit (ปกติสำหรับรอบสำรองที่ตามหลังรอบหลัก)"
             exit 0
@@ -73,8 +87,23 @@ jobs:
           git commit -m "data: update $(date -u +%F)"
           for i in 1 2 3; do
             git push && exit 0
-            echo "push ไม่ผ่าน (ครั้งที่ $i) — pull --rebase แล้วลองใหม่"
-            git pull --rebase --autostash origin main || true
+            # ไม่ใช้ rebase: ไฟล์ข้อมูลชนกันแล้ว rebase ไปต่อไม่ได้ (shallow clone ยิ่งหา base ไม่เจอ)
+            # เก็บไฟล์ที่รอบนี้สร้างไว้ → ไปอยู่บน main ล่าสุด → วางทับ → commit ใหม่
+            echo "push ไม่ผ่าน (ครั้งที่ $i) — ย้ายผลรอบนี้ไปวางบน main ล่าสุดแล้วลองใหม่"
+            rm -rf /tmp/gen && mkdir -p /tmp/gen
+            cp -r backup /tmp/gen/
+            for f in $GEN; do
+              if [ -f "$f" ]; then mkdir -p "/tmp/gen/$(dirname "$f")" && cp "$f" "/tmp/gen/$f"; fi
+            done
+            git fetch --depth 1 origin main
+            git reset --hard origin/main
+            cp -r /tmp/gen/. .
+            stage
+            if git diff --cached --quiet; then
+              echo "main ล่าสุดมีข้อมูลเดียวกันแล้ว — ไม่ต้อง push"
+              exit 0
+            fi
+            git commit -m "data: update $(date -u +%F)"
             sleep 5
           done
           echo "::error::push ไม่สำเร็จหลังลอง 3 ครั้ง"
