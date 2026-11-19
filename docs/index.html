@@ -7,13 +7,36 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+/* โหมดสี: จำไว้ใน localStorage 'rrg-theme' (ใช้ร่วมกับหน้า Performance) */
+(function(){try{var t=localStorage.getItem('rrg-theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}})();
+</script>
 <style>
 :root{
   --bg:#0b0f14; --card:#11161d; --card2:#161c25; --border:#232b36;
   --ink:#e8eaed; --ink2:#9aa4b2; --ink3:#6b7684;
   --lead:#22c55e; --imp:#3b82f6; --weak:#f59e0b; --lag:#ef4444;
-  --gold:#eab308; --accent:#f0a04b;
+  --gold:#eab308; --accent:#f0a04b; --accum:#2dd4bf;
+  --row-member:#0e1319; --tip-bg:#1b2330; --tip-border:#2e3948; --dotted:#3a4656;
+  --scroll:#2a3340; --card-in:#131a24; --grid:#1b222c; --axis:#2a3340; --dimdot:#5b6572;
+  color-scheme:dark;
 }
+html[data-theme="light"]{
+  --bg:#f5f6f8; --card:#ffffff; --card2:#eef1f4; --border:#d5dbe3;
+  --ink:#161b22; --ink2:#3f4a57; --ink3:#5f6b7a;
+  --lead:#15803d; --imp:#1d4ed8; --weak:#b45309; --lag:#c62828;
+  --gold:#a16207; --accent:#c2410c; --accum:#0f766e;
+  --row-member:#f3f5f8; --tip-bg:#ffffff; --tip-border:#cfd6df; --dotted:#9aa4b2;
+  --scroll:#c7cfd9; --card-in:#ffffff; --grid:#e6eaef; --axis:#b9c2cd; --dimdot:#b3bcc7;
+  color-scheme:light;
+}
+.hdr-actions{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.hdr-btn{background:var(--card2);border:1px solid var(--border);color:var(--ink);border-radius:9px;
+  padding:7px 15px;font-size:15.5px;font-weight:500;font-family:inherit;cursor:pointer;text-decoration:none;
+  display:inline-flex;align-items:center;gap:6px;line-height:1.3}
+.hdr-btn:hover{border-color:var(--accent);color:var(--accent)}
+.hdr-btn.accent{border-color:var(--accent);color:var(--accent)}
+.hdr-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans Thai',sans-serif;
   font-size:15.5px;line-height:1.6;padding:20px clamp(12px,3vw,36px) 60px}
@@ -39,11 +62,11 @@ h2 .sub{color:var(--ink3);font-weight:400;font-size:13px}
 .chk.off{color:var(--ink3)}
 .controls{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 button.tg{background:var(--card2);border:1px solid var(--border);color:var(--ink3);
-  border-radius:8px;padding:5px 13px;font-size:13px;cursor:pointer;font-family:inherit}
+  border-radius:8px;padding:6px 14px;font-size:14.5px;cursor:pointer;font-family:inherit}
 button.tg.on{color:var(--ink);border-color:var(--accent)}
 button.tg:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .wlin{background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--ink);
-  padding:7px 10px;font-size:13px;font-family:inherit}
+  padding:8px 12px;font-size:15px;font-family:inherit}
 .wlin:focus{outline:2px solid var(--accent);outline-offset:1px}
 #legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:13px;color:var(--ink2);margin:10px 0 6px}
 #legend .chip{display:flex;align-items:center;gap:5px;cursor:pointer;padding:1px 2px;border-radius:4px}
@@ -59,7 +82,7 @@ td .symwrap .mono{flex:none}
 td{padding:7px 6px;text-align:right;border-top:1px solid var(--border);white-space:nowrap}
 tr.theme{cursor:pointer}
 tr.theme:hover td{background:var(--card2)}
-tr.member td{background:#0e1319;color:var(--ink2);font-size:13px}
+tr.member td{background:var(--row-member);color:var(--ink2);font-size:13px}
 .ellip{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 tr.member .nm{color:var(--ink);font-weight:500}
 tr.member td:first-child{padding-left:26px}
@@ -71,31 +94,32 @@ tr.member td:first-child{padding-left:26px}
 .s-BUY{background:rgba(34,197,94,.16);color:var(--lead)}
 .s-SELL{background:rgba(239,68,68,.16);color:var(--lag)}
 .s-WATCH{background:rgba(59,130,246,.16);color:var(--imp)}
-.s-ACCUM{background:rgba(45,212,191,.16);color:#2dd4bf}
+.s-ACCUM{background:rgba(45,212,191,.16);color:var(--accum)}
 .s-REDUCE{background:rgba(245,158,11,.17);color:var(--weak)}
 .s-HOLD{background:rgba(154,164,178,.14);color:var(--ink2)}
 .t1{color:var(--lead)} .t0{color:var(--lag)} .t2{color:var(--imp)}
 .pb{font-size:12px;border-radius:20px;padding:2px 9px;background:rgba(154,164,178,.12)}
 details.guide{margin:10px 0 0;border:1px solid var(--border);border-radius:10px;background:var(--card2)}
-details.guide summary{cursor:pointer;padding:9px 14px;font-size:13.5px;color:var(--ink2);user-select:none;list-style:none;display:flex;align-items:center;gap:8px}
+details.guide summary{cursor:pointer;padding:10px 14px;font-size:15px;color:var(--ink);user-select:none;list-style:none;display:flex;align-items:center;gap:8px}
 details.guide summary::before{content:'▸';color:var(--accent);transition:transform .15s}
 details.guide[open] summary::before{transform:rotate(90deg)}
 details.guide summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.guide-body{padding:4px 16px 14px;font-size:13.5px;color:var(--ink2);line-height:1.75}
+.guide-body{padding:4px 16px 14px;font-size:15px;color:var(--ink2);line-height:1.75}
 .guide-body b{color:var(--ink);font-weight:600}
 .guide-body .qd{display:inline-block;width:9px;height:9px;border-radius:50%;margin:0 3px 0 6px}
-#tip{position:fixed;z-index:99;max-width:300px;background:#1b2330;border:1px solid #2e3948;
+#tip{position:fixed;z-index:99;max-width:300px;background:var(--tip-bg);border:1px solid var(--tip-border);
   border-radius:9px;padding:9px 12px;font-size:12.5px;line-height:1.6;color:var(--ink2);
   pointer-events:none;opacity:0;transition:opacity .12s;box-shadow:0 6px 18px rgba(0,0,0,.45)}
 #tip b{color:var(--accent)}
-th[data-tip]{text-decoration:underline dotted #3a4656;text-underline-offset:3px;cursor:help}
+th[data-tip]{text-decoration:underline dotted var(--dotted);text-underline-offset:3px;cursor:help}
 
 .tabsbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 18px;border-bottom:1px solid var(--border);padding-bottom:10px}
-.tabsbar .gear{margin-left:auto;font-size:16px;padding:5px 12px}
+.tabsbar .gear{margin-left:auto;font-size:16px;padding:7px 15px;color:var(--ink);border-color:var(--ink3);font-weight:500}
+.tabsbar .gear:hover{border-color:var(--accent);color:var(--accent)}
 #wlPanel{display:none;margin:-6px 0 18px}
 #wlPanel.show{display:block}
 .tabsbar button{background:transparent;border:1px solid var(--border);color:var(--ink3);border-radius:9px;
-  padding:6px 16px;font-size:14px;cursor:pointer;font-family:inherit;font-weight:500}
+  padding:7px 16px;font-size:15px;cursor:pointer;font-family:inherit;font-weight:500}
 .tabsbar button.on{background:rgba(240,160,75,.13);border-color:var(--accent);color:var(--accent)}
 .grpbar{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}
 .grpbar button{background:var(--card2);border:1px solid var(--border);color:var(--ink3);border-radius:20px;
@@ -109,7 +133,7 @@ th[data-tip]{text-decoration:underline dotted #3a4656;text-underline-offset:3px;
 .chartmain .chartbox{height:540px}
 #legend{display:grid;grid-template-columns:1fr;gap:2px;margin:10px 0 6px;max-height:430px;overflow-y:auto;padding-right:4px}
 #legend::-webkit-scrollbar{width:6px}
-#legend::-webkit-scrollbar-thumb{background:#2a3340;border-radius:3px}
+#legend::-webkit-scrollbar-thumb{background:var(--scroll);border-radius:3px}
 @media (max-width:1100px){
   .chartwrap{grid-template-columns:1fr}
   .sidepanel .grpbar{flex-direction:row}
@@ -122,7 +146,7 @@ th[data-tip]{text-decoration:underline dotted #3a4656;text-underline-offset:3px;
 #legend .chip.hide{opacity:.3}
 .legendctl{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
 button.tg.on{background:rgba(240,160,75,.15);border-color:var(--accent);color:var(--accent);font-weight:600}
-.card{background:#131a24;box-shadow:0 1px 0 rgba(255,255,255,.03) inset}
+.card{background:var(--card-in);box-shadow:0 1px 0 rgba(255,255,255,.03) inset}
 td{font-variant-numeric:tabular-nums}
 .dbar{position:relative}
 .dbar .fill{position:absolute;left:0;top:15%;bottom:15%;border-radius:3px;opacity:.16;pointer-events:none}
@@ -140,7 +164,10 @@ footer{margin-top:34px;color:var(--ink3);font-size:12.5px;border-top:1px solid v
   <h1>Technical Score Rotation <span class="dot">·</span> RRG</h1>
   <span class="asof" id="asof"></span>
   <span id="demoBadge" hidden class="badge-demo">DEMO DATA</span>
-  <a href="performance.html" style="margin-left:auto;color:var(--accent);font-size:13.5px;text-decoration:none">📈 Signal Performance →</a>
+  <div class="hdr-actions">
+    <a class="hdr-btn accent" href="performance.html">📈 Signal Performance →</a>
+    <button class="hdr-btn" id="themeBtn" type="button" aria-label="สลับโหมดสว่าง/มืด"></button>
+  </div>
 </header>
 
 <div id="app"><div class="err">กำลังโหลดข้อมูล…</div></div>
@@ -158,23 +185,23 @@ footer{margin-top:34px;color:var(--ink3);font-size:12.5px;border-top:1px solid v
           <input id="wlOwner" placeholder="owner" style="width:130px" class="wlin">
           <input id="wlRepo" placeholder="repo" style="width:170px" class="wlin">
           <input id="wlTok" type="password" placeholder="GitHub token (fine-grained)" style="flex:1;min-width:220px" class="wlin">
-          <label style="display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--ink3)">
+          <label style="display:flex;align-items:center;gap:5px;font-size:14px;color:var(--ink3)">
             <input type="checkbox" id="wlRemember" checked>จำ token ในเบราว์เซอร์นี้</label>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start">
           <input id="wlName" placeholder="ชื่อลิสต์ เช่น SPDR" style="width:140px" class="wlin">
-          <input type="file" id="wlFile" accept=".txt" style="color:var(--ink3);font-size:12.5px">
+          <input type="file" id="wlFile" accept=".txt" style="color:var(--ink3);font-size:14px">
           <textarea id="wlText" rows="2" placeholder="หรือ paste เช่น NASDAQ:NVDA, AMEX:SMH, NYSE:UBER"
             style="flex:1;min-width:240px" class="wlin"></textarea>
           <button class="tg on" id="wlGo" style="padding:8px 18px">อัปโหลด & รันอัปเดต</button>
         </div>
         <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap">
-          <span style="color:var(--ink3);font-size:12.5px">ลบลิสต์:</span>
+          <span style="color:var(--ink3);font-size:14px">ลบลิสต์:</span>
           <select id="wlDelSel" class="wlin" style="min-width:150px"></select>
           <button class="tg" id="wlDel" style="color:var(--lag);border-color:rgba(239,68,68,.4)">ลบลิสต์นี้</button>
         </div>
-        <div id="wlStatus" style="margin-top:8px;font-size:13px;color:var(--ink3)"></div>
-        <div style="margin-top:8px;font-size:12px;color:var(--ink3)">
+        <div id="wlStatus" style="margin-top:8px;font-size:14.5px;color:var(--ink3)"></div>
+        <div style="margin-top:8px;font-size:14px;color:var(--ink3)">
           🔑 สร้าง token ครั้งเดียวที่ github.com → Settings → Developer settings →
           Fine-grained tokens → เลือกเฉพาะ repo นี้ → Permissions: <b>Contents = Read and write</b>,
           <b>Actions = Read and write</b> · token อยู่แค่ในเบราว์เซอร์ของคุณ ส่งตรงหา GitHub เท่านั้น</div>
@@ -230,7 +257,7 @@ footer{margin-top:34px;color:var(--ink3);font-size:12.5px;border-top:1px solid v
         · จุดอยู่ Leading แต่หางโค้งหัวลงใกล้ศูนย์ = เริ่มเสียโมเมนตัมแม้คะแนนยังสูง<br>
         <b>ปุ่ม Δ:</b> Δ1 เช็กการพลิกทิศวันนี้ (แกว่งแรง เป็น zigzag ปกติ) · Δ3 โมเมนตัมสั้นแบบลด noise
         · <b>Δ5 มุมมองหลักสำหรับ rotation</b> · Δ10 ยืนยันเทรนด์ใหญ่<br>
-        <b>Signal:</b> BUY/SELL = checklist ≥7/10 · <b style="color:#2dd4bf">ACCUM (ทยอยซื้อ)</b> = 5–6 + โครงสร้างยืนยัน + money flow ไม่แดง — เริ่มไม้แรกแบบแบ่งสัดส่วน · WATCH/REDUCE = 4–6 (ดูรายละเอียดในการ์ดบนสุดและตาราง)
+        <b>Signal:</b> BUY/SELL = checklist ≥7/10 · <b style="color:var(--accum)">ACCUM (ทยอยซื้อ)</b> = 5–6 + โครงสร้างยืนยัน + money flow ไม่แดง — เริ่มไม้แรกแบบแบ่งสัดส่วน · WATCH/REDUCE = 4–6 (ดูรายละเอียดในการ์ดบนสุดและตาราง)
         · HOLD = อยู่ Leading อยู่แล้ว ไม่ใช่จุดเข้าใหม่ · "–" = ไม่มีอะไรให้ทำ ซึ่งเป็นสถานะที่ถูกต้อง
       </div>
     </details>
@@ -263,7 +290,20 @@ footer{margin-top:34px;color:var(--ink3);font-size:12.5px;border-top:1px solid v
 </template>
 
 <script>
-const QC={Leading:'#22c55e',Improving:'#3b82f6',Weakening:'#f59e0b',Lagging:'#ef4444'};
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const QC={};
+function loadThemeColors(){Object.assign(QC,{Leading:css('--lead'),Improving:css('--imp'),Weakening:css('--weak'),Lagging:css('--lag')});}
+loadThemeColors();
+function themeLabel(){const b=document.getElementById('themeBtn');if(!b)return;
+  const light=document.documentElement.dataset.theme==='light';
+  b.textContent=light?'🌙 โหมดมืด':'☀️ โหมดสว่าง';}
+function setTheme(t){document.documentElement.dataset.theme=t;
+  try{localStorage.setItem('rrg-theme',t);}catch(e){}
+  loadThemeColors();themeLabel();
+  if(chart){chart.destroy();chart=null;}   // สร้างใหม่ให้แกน/กริด/tooltip ได้สีของโหมดใหม่
+  if(D)render();}
+document.getElementById('themeBtn').onclick=()=>setTheme(document.documentElement.dataset.theme==='light'?'dark':'light');
+themeLabel();
 const QBG={Leading:'rgba(34,197,94,.055)',Improving:'rgba(59,130,246,.055)',Weakening:'rgba(245,158,11,.06)',Lagging:'rgba(239,68,68,.05)'};
 let D=null,tab='__themes__',lag=5,TAIL=8,sigOnly=false,chart=null,hi=null,
     hidden=new Set(),grpOff=new Set(),sortK='score',sortAsc=false,sortK2=null,sortAsc2=false;
@@ -361,7 +401,7 @@ const qplug={id:'q',beforeDatasetsDraw(c){
   ctx.fillStyle=QBG.Leading;ctx.fillRect(mx,a.top,a.right-mx,my-a.top);
   ctx.fillStyle=QBG.Lagging;ctx.fillRect(a.left,my,mx-a.left,a.bottom-my);
   ctx.fillStyle=QBG.Weakening;ctx.fillRect(mx,my,a.right-mx,a.bottom-my);
-  ctx.strokeStyle='#2a3340';ctx.beginPath();
+  ctx.strokeStyle=css('--axis');ctx.beginPath();
   ctx.moveTo(mx,a.top);ctx.lineTo(mx,a.bottom);ctx.moveTo(a.left,my);ctx.lineTo(a.right,my);ctx.stroke();
   ctx.font='12.5px IBM Plex Mono,monospace';
   ctx.fillStyle=QC.Improving;ctx.fillText('IMPROVING',a.left+8,a.top+15);
@@ -373,7 +413,7 @@ const qplug={id:'q',beforeDatasetsDraw(c){
 function buildDatasets(rows){
   return rows.map(r=>{const pts=tail(r.t),n=pts.length;
     const dim=hi&&r.t.name!==hi;
-    const base=dim?'#5b6572':QC[r.q];
+    const base=dim?css('--dimdot'):QC[r.q];
     return{label:r.t.name,data:pts,dts:(r.t.score_dates||[]).slice(-n),showLine:true,
       borderColor:base,backgroundColor:base,tension:.35,borderWidth:1.5,
       segment:{borderColor:s=>fade(base,(dim?.3:1)*(.12+.68*(s.p1DataIndex/Math.max(n-1,1)))),
@@ -393,12 +433,12 @@ function renderChart(rows){
     chart.options.scales.y.title.text='Δ คะแนน ('+lag+' วัน)';chart.update();}
   else{chart=new Chart(document.getElementById('rrg'),{type:'scatter',data:{datasets:ds},
     options:{responsive:true,maintainAspectRatio:false,
-      scales:{x:{min:0,max:100,ticks:{color:'#6b7684',stepSize:25,font:{size:13}},grid:{color:'#1b222c'},
-              title:{display:true,text:'คะแนนรวม technical',color:'#9aa4b2',font:{size:14}}},
-             y:{min:-ymax,max:ymax,ticks:{color:'#6b7684',font:{size:13}},grid:{color:'#1b222c'},
-              title:{display:true,text:'Δ คะแนน ('+lag+' วัน)',color:'#9aa4b2',font:{size:14}}}},
+      scales:{x:{min:0,max:100,ticks:{color:css('--ink3'),stepSize:25,font:{size:13}},grid:{color:css('--grid')},
+              title:{display:true,text:'คะแนนรวม technical',color:css('--ink2'),font:{size:14}}},
+             y:{min:-ymax,max:ymax,ticks:{color:css('--ink3'),font:{size:13}},grid:{color:css('--grid')},
+              title:{display:true,text:'Δ คะแนน ('+lag+' วัน)',color:css('--ink2'),font:{size:14}}}},
       plugins:{legend:{display:false},tooltip:{
-        backgroundColor:'#161c25',borderColor:'#232b36',borderWidth:1,titleFont:{size:14},bodyFont:{size:14},
+        backgroundColor:css('--tip-bg'),borderColor:css('--tip-border'),borderWidth:1,titleColor:css('--ink'),bodyColor:css('--ink2'),titleFont:{size:14},bodyFont:{size:14},
         callbacks:{
           title:c=>{const t=c[0];const d=t.dataset.dts&&t.dataset.dts[t.dataIndex];
             const n=t.dataset.data.length,ago=n-1-t.dataIndex;
@@ -440,8 +480,8 @@ function renderTables(rows){
       <td class="l" style="font-weight:600"><div class="symwrap ellip"><span>${t.name}</span>${t.fullname?`<span class="nm ellip mut" style="font-weight:400;font-size:12px">${t.fullname}</span>`:''}${t.symbols&&t.symbols.length?' <span class="mut" style="font-weight:400">▸</span>':''}</div></td>
       <td>${fs(t.sub.cipher)}</td><td>${fs(t.sub.hull)}</td><td>${fs(t.sub.ma50)}</td><td>${fs(t.sub.ma200)}</td>
       <td class="mono ${t.adx_mult>=1.2?'pos':t.adx_mult<=0.7?'mut':''}">×${t.adx_mult.toFixed(2)}</td>
-      <td class="mono dbar" style="font-weight:600">${bar(r.x,100,'#22c55e')}${Math.round(r.x)}</td>
-      <td class="mono dbar ${r.y>=0?'pos':'neg'}">${bar(r.y,20,r.y>=0?'#22c55e':'#ef4444')}${r.y>=0?'+':''}${Math.round(r.y)}</td>
+      <td class="mono dbar" style="font-weight:600">${bar(r.x,100,QC.Leading)}${Math.round(r.x)}</td>
+      <td class="mono dbar ${r.y>=0?'pos':'neg'}">${bar(r.y,20,r.y>=0?QC.Leading:QC.Lagging)}${r.y>=0?'+':''}${Math.round(r.y)}</td>
       <td class="l"><span class="pill q-${r.q}">${r.q}</span></td>
       <td class="l">${sigPill(t.signal)}${dqBadge(t.quality)}</td></tr>`);
     (t.symbols||[]).forEach(s=>{const sb=s.sub||{};const tip=('<b>'+s.sym+'</b>'+(s.name?' — '+s.name:'')+'<br>'+s.structure.label+(s.pattern?' · '+s.pattern.label:'')).replace(/"/g,'&quot;');
@@ -480,10 +520,10 @@ function renderTables(rows){
 function spark(px){
   const w=84,h=24,mn=Math.min(...px),mx=Math.max(...px),rg=(mx-mn)||1;
   const pt=px.map((v,i)=>`${(i/(px.length-1)*w).toFixed(1)},${(h-2-(v-mn)/rg*(h-4)).toFixed(1)}`).join(' ');
-  const mi=px.indexOf(mn),up=px[px.length-1]>=px[0],c=up?'#22c55e':'#ef4444';
+  const mi=px.indexOf(mn),up=px[px.length-1]>=px[0],c=up?QC.Leading:QC.Lagging;
   const ly=(h-2-(px[px.length-1]-mn)/rg*(h-4)).toFixed(1);
   return`<svg width="${w}" height="${h}"><polyline points="${pt}" fill="none" stroke="${c}" stroke-width="1.5"/>
-    <circle cx="${(mi/(px.length-1)*w).toFixed(1)}" cy="${h-2}" r="2.5" fill="#ef4444"/>
+    <circle cx="${(mi/(px.length-1)*w).toFixed(1)}" cy="${h-2}" r="2.5" fill="${QC.Lagging}"/>
     <circle cx="${w}" cy="${ly}" r="2.5" fill="${c}"/></svg>`;
 }
 
