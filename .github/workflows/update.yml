@@ -51,11 +51,21 @@ jobs:
       - name: Run pipeline
         run: python scripts/run_daily.py --force
 
+      # วัดผลสัญญาณย้อนหลัง → docs/performance.json (ใช้ราคาจาก cache ที่ run_daily เพิ่งดึง)
+      # พังแล้วไม่ให้ทั้ง workflow ล้ม: data.json ของวันนี้ต้อง commit ได้เสมอ
+      - name: Track signal performance
+        continue-on-error: true
+        run: python scripts/track_performance.py
+
       - name: Commit updated data
         run: |
           git config user.name "rrg-bot"
           git config user.email "actions@github.com"
           git add docs/data.json backup/ data/names.json
+          # ไฟล์ของ tracker อาจยังไม่มี (เช่นรอบที่ track_performance ล้ม) — ห้ามทำให้ commit พัง
+          for f in docs/performance.json data/signals_log.csv; do
+            if [ -f "$f" ]; then git add "$f"; fi
+          done
           if git diff --cached --quiet; then
             echo "ไม่มีอะไรเปลี่ยน — ข้าม commit (ปกติสำหรับรอบสำรองที่ตามหลังรอบหลัก)"
             exit 0
