@@ -58,6 +58,10 @@ table{border-collapse:collapse;width:100%;font-size:15px}
 th,td{padding:7px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--grid)}
 th{color:var(--ink2);font-weight:500;font-size:13.5px;position:sticky;top:0;background:var(--card)}
 td:first-child,th:first-child{text-align:left}
+th.sortable{cursor:pointer;user-select:none}
+th.sortable:hover,th.sortable.on{color:var(--accent)}
+th.sortable:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+th .arw{font-size:11px;opacity:.55} th.on .arw{opacity:1}
 td.l,th.l{text-align:left}
 tr:hover td{background:var(--card2)}
 .pos{color:var(--pos)} .neg{color:var(--neg)} .dim{color:var(--ink3)}
@@ -277,17 +281,46 @@ function renderMonthly(host) {
 }
 
 // ---------------- 5) episode ล่าสุด ----------------
-let RG = "ALL";
+let RG = "ALL", SK = "start", SDIR = -1;          // คอลัมน์ที่ sort + ทิศ (1 น้อย→มาก, -1 มาก→น้อย)
+const RCOLS = [
+  // [key, หัวคอลัมน์, ชิดซ้าย?, ทิศเริ่มต้นเมื่อกดครั้งแรก]
+  ["sym", "Symbol", true, 1], ["grade", "เกรด", true, 1], ["start", "เริ่ม", true, -1],
+  ["path", "ก่อนหน้า → ถัดไป", true, 1], ["days", "อยู่ในเกรด (วัน)", false, -1],
+  ["ret", "Return ถึงออก/วันนี้", false, -1], ["xs", "Excess", false, -1], ["open", "สถานะ", true, -1]];
+function sortVal(r, k) {
+  if (k === "grade") return GR.indexOf(r.grade);
+  if (k === "path") return `${r.prev ?? ""}>${r.next ?? ""}`;
+  if (k === "open") return r.open ? 1 : 0;
+  return r[k];
+}
 function renderRecent(host) {
   host.replaceChildren();
   host.append(chips("เกรด", [["ALL", "ทั้งหมด"], ["BUY", "BUY"], ["ACCUM", "ACCUM"], ["WATCH", "WATCH"], ["SELL", "SELL"]], RG,
     v => { RG = v; renderRecent(host); }));
-  const t = el("table", {}, el("thead", {}, el("tr", {},
-    el("th", {text: "Symbol"}), el("th", {class: "l", text: "เกรด"}), el("th", {class: "l", text: "เริ่ม"}),
-    el("th", {class: "l", text: "ก่อนหน้า → ถัดไป"}), el("th", {text: "อยู่ในเกรด (วัน)"}),
-    el("th", {text: "Return ถึงออก/วันนี้"}), el("th", {text: "Excess"}), el("th", {class: "l", text: "สถานะ"}))));
+  const hr = el("tr");
+  for (const [k, label, left, firstDir] of RCOLS) {
+    const on = SK === k;
+    const th = el("th", {class: "sortable" + (left ? " l" : "") + (on ? " on" : ""), tabindex: "0",
+      "aria-sort": on ? (SDIR > 0 ? "ascending" : "descending") : "none",
+      title: "คลิกเพื่อเรียง · คลิกซ้ำเพื่อกลับทิศ"});
+    th.append(label, el("span", {class: "arw", text: on ? (SDIR > 0 ? " ▲" : " ▼") : " ↕"}));
+    const go = () => { if (SK === k) SDIR = -SDIR; else { SK = k; SDIR = firstDir; } renderRecent(host); };
+    th.onclick = go;
+    th.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } };
+    hr.append(th);
+  }
+  const t = el("table", {}, el("thead", {}, hr));
+  const list = D.recent.filter(r => RG === "ALL" || r.grade === RG).slice()
+    .sort((a, b) => {
+      const x = sortVal(a, SK), y = sortVal(b, SK);
+      if (x == null && y == null) return 0;
+      if (x == null) return 1;                          // ค่าว่าง (ยังไม่มีผล) ไว้ท้ายเสมอ
+      if (y == null) return -1;
+      const c = typeof x === "string" ? x.localeCompare(y) : x - y;
+      return c * SDIR || (b.start.localeCompare(a.start));
+    });
   const tb = el("tbody");
-  for (const r of D.recent.filter(r => RG === "ALL" || r.grade === RG)) {
+  for (const r of list) {
     tb.append(el("tr", {},
       el("td", {class: "mono", text: r.sym}), el("td", {class: "l"}, gradePill(r.grade)),
       el("td", {class: "l mono", text: r.start}),
@@ -296,7 +329,9 @@ function renderRecent(host) {
       el("td", {class: "l " + (r.open ? "" : "dim"), text: r.open ? "ยังอยู่" : "จบแล้ว"})));
   }
   t.append(tb);
-  host.append(el("div", {class: "card tblwrap", style: "max-height:480px;overflow:auto"}, t));
+  host.append(el("div", {class: "card tblwrap", style: "max-height:560px;overflow:auto"}, t),
+    el("div", {class: "meta", style: "margin-top:6px",
+      text: `${list.length} episode · คลิกหัวคอลัมน์เพื่อเรียง · ช่อง "—" = เพิ่งเริ่ม ยังไม่มีผล (อยู่ท้ายเสมอ)`}));
 }
 
 function section(title, sub) {
@@ -344,7 +379,7 @@ function build() {
     renderPaths(section("เส้นทางสัญญาณ", "WATCH → ACCUM → BUY เกิดจริงแค่ไหน"));
     renderStrategies(section("เทียบวิธีเข้า", `ถือ ${P.main_h} วัน`));
     renderMonthly(section("ความสม่ำเสมอรายเดือน", `Excess ${P.main_h}D`));
-    renderRecent(section("Episode ล่าสุด", "60 ครั้งล่าสุดของ BUY / ACCUM / WATCH / SELL"));
+    renderRecent(section("Episode ล่าสุด", `${d.recent.length} ครั้งล่าสุดของ BUY / ACCUM / WATCH / SELL`));
     const det = el("details", {}, el("summary", {text: "วิธีคำนวณ"}), el("ul", {},
       el("li", {text: "สัญญาณมาจาก data/signals_log.csv (รอบแรกของแต่ละวัน) และเติมย้อนหลังจาก backup/ ก่อนเริ่มมี log"}),
       el("li", {text: "ราคา: adjusted close จาก yfinance (ปรับ split/ปันผลแล้ว) · ช่วงที่ราคากระโดด >50% ในแท่งเดียวไม่นับ"}),
