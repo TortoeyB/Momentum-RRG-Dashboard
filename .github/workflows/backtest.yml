@@ -1,0 +1,61 @@
+name: Backtest replay
+
+# กดสั่งเองเท่านั้น (Actions → Backtest replay → Run workflow) — ไม่อยู่ในรอบรายวัน
+# สร้างสัญญาณย้อนหลังด้วย logic ปัจจุบันตั้งแต่ start แล้ว backtest พอร์ตกติกาปัจจุบัน → docs/backtest.json
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: "วันเริ่ม backtest (YYYY-MM-DD)"
+        default: "2025-01-02"
+        required: true
+
+permissions:
+  contents: write
+
+# ใช้กลุ่มเดียวกับรอบรายวัน — กัน push ชนกันถ้ารันพร้อมกัน
+concurrency:
+  group: update-data
+  cancel-in-progress: false
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync to latest main
+        run: |
+          git fetch --depth 1 origin main
+          git reset --hard origin/main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Replay signals + backtest
+        run: python scripts/backtest_replay.py --start "${{ github.event.inputs.start }}"
+
+      # commit แค่ผลสรุป (docs/backtest.json ~50–100 KB) — ไฟล์สัญญาณ replay (~5 MB) ไม่เก็บใน repo
+      - name: Commit result
+        run: |
+          git config user.name "rrg-bot"
+          git config user.email "actions@github.com"
+          cp docs/backtest.json /tmp/backtest.json
+          for i in 1 2 3; do
+            git fetch --depth 1 origin main
+            git reset --hard origin/main
+            cp /tmp/backtest.json docs/backtest.json
+            git add docs/backtest.json
+            if git diff --cached --quiet; then echo "ผลเหมือนเดิม — ไม่ต้อง commit"; exit 0; fi
+            git commit -m "backtest: replay from ${{ github.event.inputs.start }}"
+            git push && exit 0
+            echo "push ไม่ผ่าน (ครั้งที่ $i) — ลองใหม่"
+            sleep 5
+          done
+          echo "::error::push ไม่สำเร็จหลังลอง 3 ครั้ง"
+          exit 1
