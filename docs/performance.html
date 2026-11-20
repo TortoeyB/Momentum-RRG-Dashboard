@@ -334,7 +334,7 @@ function renderRecent(host) {
       el("td", {class: "l mono", text: r.start}),
       el("td", {class: "l dim", text: `${r.prev ?? "—"} → ${r.next ?? "…"}`}),
       numCell(r.days), pctCell(r.ret), pctCell(r.xs),
-      el("td", {class: "l " + (r.open ? "" : "dim"), text: r.open ? "ยังอยู่" : "จบแล้ว"})));
+      el("td", {class: "l " + (r.open ? "" : "dim"), text: r.open ? "Active" : "Ended"})));
   }
   t.append(tb);
   host.append(el("div", {class: "card tblwrap", style: "max-height:560px;overflow:auto"}, t),

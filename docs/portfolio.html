@@ -84,6 +84,9 @@ tbody tr.sel td{background:var(--card2);box-shadow:inset 3px 0 0 var(--accent)}
 .g-ACCUM{color:var(--g-lead);border-color:var(--g-lead)}
 .g-ACCUM→BUY{color:var(--g-lead);border-color:var(--g-lead)}
 .err{color:var(--neg);padding:30px 0}
+.st{font-weight:600;font-size:13px;border-radius:20px;padding:1px 9px;border:1px solid var(--border);display:inline-block}
+.st-on{color:var(--accent);border-color:var(--accent)}
+.st-off{color:var(--ink2)}
 .empty{color:var(--ink3);padding:10px 0;font-size:14.5px}
 .rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:4px 24px;font-size:14.5px;color:var(--ink2)}
 .rules b{color:var(--ink);font-weight:500}
@@ -135,6 +138,22 @@ const axis = (title, cb) => ({grid: {color: css("--grid")}, ticks: {color: css("
 const xTime = () => ({grid: {display: false}, ticks: {color: css("--ink2"), font: {size: 13}, maxTicksLimit: 8, maxRotation: 0}});
 const tipStyle = () => ({backgroundColor: css("--card2"), borderColor: css("--border"), borderWidth: 1,
   titleColor: css("--ink"), bodyColor: css("--ink2"), titleFont: {size: 14}, bodyFont: {size: 14}, padding: 10});
+
+// ---------------- สถานะพอร์ตปัจจุบัน (P/L) ----------------
+function renderPL(host) {
+  const L = D.pl; if (!L) return;
+  const sign = v => v == null ? "" : v > 0 ? "pos" : v < 0 ? "neg" : "";
+  const sm = v => v == null ? "—" : (v > 0 ? "+" : "") + money(v);
+  const tile = (k, v, s, cls = "") => el("div", {class: "tile"}, el("div", {class: "k", text: k}),
+    el("div", {class: "v " + cls, text: v}), s ? el("div", {class: "s", text: s}) : null);
+  host.append(el("div", {class: "tiles"},
+    tile("มูลค่าพอร์ต (NAV)", money(L.nav), `ทุน ${money(L.capital)} · ณ ${L.date}`),
+    tile("กำไร/ขาดทุนรวม", sm(L.total), `${fmt(L.total_pct)}% จากทุน`, sign(L.total)),
+    tile("Realized P/L", sm(L.realized), `Unwind แล้ว ${L.realized_n} รายการ · กำไร ${L.realized_win}`, sign(L.realized)),
+    tile("Unrealized P/L", sm(L.unrealized), `On Position ${L.unrealized_n} ตัว` + (L.unrealized_pct == null ? "" : ` · ${fmt(L.unrealized_pct)}% ของต้นทุน`), sign(L.unrealized)),
+    tile("วันนี้", sm(L.day), (L.day_pct == null ? "" : `${fmt(L.day_pct)}%`) + (L.prev_date ? ` · เทียบ ${L.prev_date}` : ""), sign(L.day)),
+    tile("เงินสด", money(L.cash), `${L.cash_pct}% ของพอร์ต · ลงทุน ${money(L.invested)}`)));
+}
 
 // ---------------- สรุปตัวเลข ----------------
 function renderTiles(host) {
@@ -272,7 +291,7 @@ const COLS = [
   ["inst", "ตัวที่ถือ", true, 1], ["sym", "สัญญาณจาก", true, 1], ["grade", "เข้าด้วย", true, 1],
   ["entry", "วันซื้อ", true, -1], ["exit", "วันขาย", true, -1], ["bars", "ถือ (วัน)", false, -1],
   ["weight", "ขนาด", false, -1], ["ret", "ผลตอบแทน (หลังค่าธรรมเนียม)", false, -1],
-  ["pnl", "กำไร/ขาดทุน", false, -1], ["reason", "เหตุผลที่ขาย", true, 1]];
+  ["pnl", "กำไร/ขาดทุน", false, -1], ["reason", "สถานะ · เหตุผลที่ขาย", true, 1]];
 let logHost = null, pxHost = null;
 function tradeTable(rows, sortable, onPick) {
   const hr = el("tr");
@@ -290,9 +309,10 @@ function tradeTable(rows, sortable, onPick) {
   for (const t of rows) {
     const tr = el("tr", {class: SELTRADE && SELTRADE.inst === t.inst && SELTRADE.entry === t.entry ? "sel" : "", tabindex: "0"},
       td(t.inst), td(t.sym, "l mono dim"), el("td", {class: "l"}, pill(t.grade)), td(t.entry, "l mono"),
-      td(t.open ? "ยังถือ" : t.exit, "l mono" + (t.open ? " dim" : "")), td(t.bars), td(t.weight + "%"),
+      td(t.open ? "—" : t.exit, "l mono" + (t.open ? " dim" : "")), td(t.bars), td(t.weight + "%"),
       pctTd(t.ret), el("td", {class: "mono " + (t.pnl > 0 ? "pos" : t.pnl < 0 ? "neg" : ""), text: money(t.pnl)}),
-      td(t.reason, "l" + (t.open ? " dim" : "")));
+      el("td", {class: "l"}, el("span", {class: "st " + (t.open ? "st-on" : "st-off"), text: t.open ? "On Position" : "Unwind"}),
+        t.open ? null : el("span", {class: "dim", text: " · " + t.reason})));
     const pick = () => onPick(t);
     tr.onclick = pick; tr.onkeydown = e => { if (e.key === "Enter") pick(); };
     tb.append(tr);
@@ -306,7 +326,7 @@ function pickTrade(t) {
 let openHost = null;
 function renderOpen(host) {
   host.replaceChildren();
-  if (!D.open.length) host.append(el("div", {class: "empty", text: "ไม่มีตัวที่ถืออยู่ — ทั้งพอร์ตเป็นเงินสด"}));
+  if (!D.open.length) host.append(el("div", {class: "empty", text: "ไม่มี position — ทั้งพอร์ตเป็นเงินสด"}));
   else host.append(el("div", {class: "card tblwrap"}, tradeTable([...D.open].sort((a, b) => b.ret - a.ret), false, pickTrade)));
   if (D.pending.length) host.append(el("div", {class: "meta", style: "margin-top:8px",
     text: "คำสั่งรอส่งพรุ่งนี้: " + D.pending.map(o => `${o.side === "buy" ? "ซื้อ" : "ขาย"} ${o.inst}${o.grade ? " (" + o.grade + ")" : o.reason ? " (" + o.reason + ")" : ""}`).join(" · ")}));
@@ -347,13 +367,14 @@ function build() {
   app.append(el("div", {class: "note", text:
     `พอร์ตจำลองที่ซื้อขายตามสัญญาณของ dashboard ด้วย${rulesName(D.rules.version)} — ผลก่อน ${D.rules.live_since} เป็น backtest ที่รู้ผลแล้ว ` +
     "ผลหลังจากนั้นคือของจริง · ใช้ดูว่าระบบทำงานอย่างไร ไม่ใช่คำแนะนำการลงทุน"}));
-  renderTiles(section("สรุป"));
+  renderPL(section("สถานะพอร์ตปัจจุบัน", "กำไร/ขาดทุนรวม = Realized (ขายแล้ว) + Unrealized (ยังถือ ตามราคาปิดล่าสุด)"));
+  renderTiles(section("ผลงานพอร์ต"));
   renderEquity(section("เส้นพอร์ต", "ผลตอบแทนสะสมเทียบ S&P 500 และการถือทุกตัวเท่ากัน"));
-  openHost = section("ถืออยู่ตอนนี้", "ผลตอบแทนคิดถึงราคาปิดล่าสุด (หักค่าธรรมเนียมขายแล้ว)");
+  openHost = section("On Position", "Unrealized P/L ตามราคาปิดล่าสุด (ยังไม่หักค่าขาย)");
   renderOpen(openHost);
   pxHost = section("จุดซื้อ / จุดขาย", "เลือกตัว หรือคลิกแถวในตาราง");
   renderPx(pxHost);
-  logHost = section("ประวัติการเทรด");
+  logHost = section("ประวัติการเทรด (Unwind)", "Realized P/L หลังหักค่าธรรมเนียมซื้อและขาย");
   renderLog(logHost);
   renderRules(section("กติกาพอร์ต"));
 }
