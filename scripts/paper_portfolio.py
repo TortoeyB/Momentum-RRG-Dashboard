@@ -230,7 +230,8 @@ def simulate(log: pd.DataFrame, prices: dict[str, pd.Series]):
     open_rows = []
     for inst, p in book.pos.items():
         price = book.px(inst, last)
-        open_rows.append(book._trade_row(inst, p, last, price, p["units"] * price * (1 - COST), "ยังถืออยู่", True))
+        # unrealized = มูลค่าตามราคาปิดล่าสุด − ต้นทุน (ยังไม่หักค่าขาย เพราะยังไม่ได้ขาย)
+        open_rows.append(book._trade_row(inst, p, last, price, p["units"] * price, "On Position", True))
     for inst, p in book.pos.items():                     # ถือครบกำหนดในแท่งถัดไป
         if p["bars"] == HOLD_BARS - 1 and not any(o["inst"] == inst and o["side"] == "sell" for o in pending):
             pending.append({"date": None, "side": "sell", "inst": inst, "reason": f"ครบ {HOLD_BARS} วัน"})
@@ -238,7 +239,28 @@ def simulate(log: pd.DataFrame, prices: dict[str, pd.Series]):
                      "side": o["side"], "inst": o["inst"],
                      **({"sym": o["meta"]["sym"], "grade": o["meta"]["grade"]} if "meta" in o else {"reason": o["reason"]})}
                     for o in pending]
-    return pd.DataFrame(curve).set_index("d"), book.trades, open_rows, pending_rows, skipped, cal, ent
+    return pd.DataFrame(curve).set_index("d"), book.trades, open_rows, pending_rows, skipped, cal, ent, book.cash
+
+
+def pl_block(pf: pd.Series, trades: list[dict], open_rows: list[dict], cash: float) -> dict:
+    """สถานะพอร์ตปัจจุบัน: NAV = ทุน + realized + unrealized (ตรวจให้ลงตัว)"""
+    nav = float(pf.iloc[-1])
+    realized = float(sum(t["pnl"] or 0 for t in trades))
+    unrealized = float(sum(t["pnl"] or 0 for t in open_rows))
+    gap = nav - START_CAPITAL - realized - unrealized
+    if abs(gap) > 50:                      # ปัดเศษรายเทรดได้ไม่กี่บาท — เกินนี้แปลว่าบัญชีไม่ลงตัว
+        print(f"[pf] คำเตือน: NAV − ทุน ไม่เท่ากับ realized + unrealized (ต่าง {gap:,.0f})")
+    prev = float(pf.iloc[-2]) if len(pf) > 1 else nav
+    mkt = nav - cash
+    return {"date": pf.index[-1], "capital": START_CAPITAL, "nav": _r(nav, 0),
+            "total": _r(nav - START_CAPITAL, 0), "total_pct": _r((nav / START_CAPITAL - 1) * 100),
+            "realized": _r(realized, 0), "realized_n": len(trades),
+            "realized_win": sum(1 for t in trades if (t["pnl"] or 0) > 0),
+            "unrealized": _r(unrealized, 0), "unrealized_n": len(open_rows),
+            "unrealized_pct": _r(unrealized / (mkt - unrealized) * 100) if mkt - unrealized > 0 else None,
+            "day": _r(nav - prev, 0), "day_pct": _r((nav / prev - 1) * 100) if prev else None,
+            "prev_date": pf.index[-2] if len(pf) > 1 else None,
+            "cash": _r(cash, 0), "cash_pct": _r(cash / nav * 100, 1), "invested": _r(mkt, 0)}
 
 
 def stats(curve: pd.Series, trades: list[dict], invested: pd.Series) -> dict:
@@ -307,7 +329,7 @@ def main():
     if BENCH not in prices:
         raise SystemExit(f"ไม่มีราคา {BENCH}")
 
-    curve, trades, open_rows, pending, skipped, cal, ent = simulate(log, prices)
+    curve, trades, open_rows, pending, skipped, cal, ent, cash = simulate(log, prices)
     pf = curve["pf"]
 
     # benchmark: S&P 500 และ equal-weight ทุกตัวที่ซื้อได้ ณ วันแรก (ซื้อแล้วถือ)
@@ -361,6 +383,7 @@ def main():
                   "execution": "ราคาปิดแท่งถัดไปหลังเกิดสัญญาณ", "proxy": PROXY,
                   "proxy_missing": sorted(set(proxy_missing)),
                   "price_source": "backup px_hist" if offline else "yfinance (adjusted close)"},
+        "pl": pl_block(pf, trades, open_rows, cash),
         "stats": {"portfolio": pf_stats, "live": live,
                   "spx": {"ret": _r((spx.iloc[-1] / spx.iloc[0] - 1) * 100),
                           "max_dd": _r((spx / spx.cummax() - 1).min() * 100)},
