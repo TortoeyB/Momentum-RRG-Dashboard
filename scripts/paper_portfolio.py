@@ -242,6 +242,46 @@ def simulate(log: pd.DataFrame, prices: dict[str, pd.Series]):
     return pd.DataFrame(curve).set_index("d"), book.trades, open_rows, pending_rows, skipped, cal, ent, book.cash
 
 
+def book_view(log: pd.DataFrame, prices: dict, srcs: list[str], live_from=None) -> dict:
+    """จำลองพอร์ต 1 บัญชี แล้วคืนทุกอย่างที่หน้าเว็บต้องใช้ (curve, P/L, เทรด, สถิติ)"""
+    curve, trades, open_rows, pending, skipped, cal, ent, cash = simulate(log, prices)
+    if live_from is not None:
+        ent = ent[ent.start >= pd.Timestamp(live_from)]
+    pf = curve["pf"]
+    spx = prices[BENCH].reindex(cal).ffill()
+    spx = spx / spx.dropna().iloc[0] * START_CAPITAL
+    ew_parts = []
+    for inst in sorted({PROXY.get(s, s) for s in srcs}):
+        s = prices.get(inst)
+        if s is None:
+            continue
+        s = s.reindex(cal).ffill()
+        if pd.isna(s.iloc[0]):
+            continue
+        ew_parts.append(s / s.iloc[0])
+    ew = pd.concat(ew_parts, axis=1).mean(axis=1) * START_CAPITAL if ew_parts else spx * np.nan
+    # กราฟแสดงเฉพาะวันทำการของ S&P (+ วันสุดท้าย) — วันเสาร์อาทิตย์ของ crypto ทำให้เส้นเป็นขั้นบันได
+    show = set(prices[BENCH].index) | {cal[-1]}
+    curve_out = [{"d": d.strftime("%Y-%m-%d"), "pf": _r(v, 0), "spx": _r(spx.loc[d], 0), "ew": _r(ew.loc[d], 0),
+                  "inv": _r(curve.loc[d.strftime("%Y-%m-%d"), "invested"] * 100, 1),
+                  "n": int(curve.loc[d.strftime("%Y-%m-%d"), "n"])}
+                 for d, v in zip(cal, pf.values) if d in show]
+    return {
+        "range": [cal[0].strftime("%Y-%m-%d"), cal[-1].strftime("%Y-%m-%d")],
+        "pl": pl_block(pf, trades, open_rows, cash),
+        "stats": {"portfolio": stats(pf, trades, curve["invested"]),
+                  "spx": {"ret": _r((spx.iloc[-1] / spx.iloc[0] - 1) * 100),
+                          "max_dd": _r((spx / spx.cummax() - 1).min() * 100)},
+                  "ew": {"ret": _r((ew.iloc[-1] / ew.iloc[0] - 1) * 100),
+                         "max_dd": _r((ew / ew.cummax() - 1).min() * 100)}},
+        "curve": curve_out,
+        "trades": sorted(trades, key=lambda t: t["entry"], reverse=True),
+        "open": open_rows, "pending": pending,
+        "skipped": skipped[-50:], "skipped_count": len(skipped),
+        "signals_seen": int(len(ent)),
+    }
+
+
 def pl_block(pf: pd.Series, trades: list[dict], open_rows: list[dict], cash: float) -> dict:
     """สถานะพอร์ตปัจจุบัน: NAV = ทุน + realized + unrealized (ตรวจให้ลงตัว)"""
     nav = float(pf.iloc[-1])
@@ -329,52 +369,30 @@ def main():
     if BENCH not in prices:
         raise SystemExit(f"ไม่มีราคา {BENCH}")
 
-    curve, trades, open_rows, pending, skipped, cal, ent, cash = simulate(log, prices)
-    pf = curve["pf"]
+    # ---- 2 มุมมอง แยกบัญชีกันเด็ดขาด ----
+    # backtest: ทั้งช่วงที่มีสัญญาณ (ก่อน LIVE_SINCE = ใช้กติกาย้อนหลัง → in-sample)
+    # live:     เริ่มเงินสดเต็ม START_CAPITAL ใหม่ · เข้าเฉพาะสัญญาณที่เกิดตั้งแต่วันทำการก่อน LIVE_SINCE
+    #           (สัญญาณวันนั้นรู้หลังตลาดปิด → ส่งคำสั่งแท่งแรกของ LIVE_SINCE) · ไม่รับ position ต่อจาก backtest
+    bt = book_view(log, prices, srcs)
+    snaps = sorted(log.as_of.unique())
+    before = [d for d in snaps if d < pd.Timestamp(LIVE_SINCE)]
+    live = None
+    if len(before) >= 2:
+        seed = before[-2]                     # แถวแรกของแต่ละตัวถูกใช้เป็น "เกรดก่อนหน้า" เท่านั้น
+        live = book_view(log[log.as_of >= seed], prices, srcs, live_from=before[-1])
+        base = before[-1].strftime("%Y-%m-%d")      # วันก่อนเริ่มจริง = จุดตั้งต้น 0% ของกราฟ
+        live["curve"] = [c for c in live["curve"] if c["d"] >= base]
+        live["range"][0] = base
 
-    # benchmark: S&P 500 และ equal-weight ทุกตัวที่ซื้อได้ ณ วันแรก (ซื้อแล้วถือ)
-    spx = prices[BENCH].reindex(cal).ffill()
-    spx = spx / spx.dropna().iloc[0] * START_CAPITAL
-    ew_parts = []
-    for inst in sorted({PROXY.get(s, s) for s in srcs}):
-        s = prices.get(inst)
-        if s is None:
-            continue
-        s = s.reindex(cal).ffill()
-        if pd.isna(s.iloc[0]):
-            continue
-        ew_parts.append(s / s.iloc[0])
-    ew = pd.concat(ew_parts, axis=1).mean(axis=1) * START_CAPITAL if ew_parts else spx * np.nan
-
-    # กราฟแสดงเฉพาะวันทำการของ S&P (+ วันสุดท้าย) — วันเสาร์อาทิตย์ของ crypto ทำให้เส้นเป็นขั้นบันได
-    show = set(prices[BENCH].index) | {cal[-1]}
-    curve_out = [{"d": d.strftime("%Y-%m-%d"), "pf": _r(v, 0), "spx": _r(spx.loc[d], 0), "ew": _r(ew.loc[d], 0),
-                  "inv": _r(curve.loc[d.strftime("%Y-%m-%d"), "invested"] * 100, 1),
-                  "n": int(curve.loc[d.strftime("%Y-%m-%d"), "n"])}
-                 for d, v in zip(cal, pf.values) if d in show]
-
-    # ราคาของตัวที่เคยเทรด — ใช้วาดจุดซื้อ/ขาย
-    traded = sorted({t["inst"] for t in trades} | {t["inst"] for t in open_rows})
+    traded = sorted({t["inst"] for v in (bt, live) if v for t in v["trades"] + v["open"]})
     px_out = {}
     for inst in traded:
         s = prices[inst]
-        s = s[(s.index >= cal[0]) & (s.index <= cal[-1])]
+        s = s[s.index >= pd.Timestamp(bt["range"][0])]
         px_out[inst] = {"d": [x.strftime("%Y-%m-%d") for x in s.index], "c": [_r(v, 4) for v in s.values]}
 
-    pf_stats = stats(pf, trades, curve["invested"])
-    # ผลนับจากวันที่เริ่มใช้กติกาจริง (ฐาน = มูลค่า ณ วันทำการก่อน LIVE_SINCE)
-    live = None
-    base_idx = [d for d in pf.index if d < LIVE_SINCE]
-    if base_idx and pf.index[-1] >= LIVE_SINCE:
-        b = base_idx[-1]
-        bs = spx.loc[pd.Timestamp(b)]
-        live = {"base_date": b, "days": int(sum(1 for d in pf.index if d >= LIVE_SINCE)),
-                "ret": _r((pf.iloc[-1] / pf.loc[b] - 1) * 100),
-                "spx": _r((spx.iloc[-1] / bs - 1) * 100),
-                "trades": int(sum(1 for t in trades if t["exit"] >= LIVE_SINCE))}
     out = {
         "generated_at": pd.Timestamp.now(tz="UTC").strftime("%Y-%m-%dT%H:%MZ"),
-        "range": [cal[0].strftime("%Y-%m-%d"), cal[-1].strftime("%Y-%m-%d")],
         "rules": {"version": RULES_VERSION, "capital": START_CAPITAL, "max_pos": MAX_POS,
                   "w_buy": W_BUY * 100, "w_accum": W_ACCUM * 100, "hold_bars": HOLD_BARS,
                   "exit_grades": sorted(EXIT_GRADES), "cost": COST * 100,
@@ -383,25 +401,18 @@ def main():
                   "execution": "ราคาปิดแท่งถัดไปหลังเกิดสัญญาณ", "proxy": PROXY,
                   "proxy_missing": sorted(set(proxy_missing)),
                   "price_source": "backup px_hist" if offline else "yfinance (adjusted close)"},
-        "pl": pl_block(pf, trades, open_rows, cash),
-        "stats": {"portfolio": pf_stats, "live": live,
-                  "spx": {"ret": _r((spx.iloc[-1] / spx.iloc[0] - 1) * 100),
-                          "max_dd": _r((spx / spx.cummax() - 1).min() * 100)},
-                  "ew": {"ret": _r((ew.iloc[-1] / ew.iloc[0] - 1) * 100),
-                         "max_dd": _r((ew / ew.cummax() - 1).min() * 100)}},
-        "curve": curve_out,
-        "trades": sorted(trades, key=lambda t: t["entry"], reverse=True),
-        "open": open_rows, "pending": pending,
-        "skipped": skipped[-50:], "skipped_count": len(skipped),
-        "signals_seen": int(len(ent)),
+        **bt,                                  # ระดับบนสุด = backtest (หน้าเว็บเดิมยังอ่านได้)
+        "live": live,
         "prices": px_out,
     }
     with open(OUT, "w", encoding="utf-8") as f:
         json.dump(_clean(out), f, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
-    s = pf_stats
-    print(f"[pf] {out['range'][0]} → {out['range'][1]} · พอร์ต {s['ret']}% (S&P {out['stats']['spx']['ret']}%, "
-          f"EW {out['stats']['ew']['ret']}%) · max DD {s['max_dd']}% · {s['trades']} เทรดปิดแล้ว · "
-          f"ถืออยู่ {len(open_rows)} · ข้ามเพราะพอร์ตเต็ม/เงินไม่พอ {len(skipped)}")
+    b = bt["stats"]["portfolio"]
+    print(f"[pf] backtest {bt['range'][0]} → {bt['range'][1]} · {b['ret']}% (S&P {bt['stats']['spx']['ret']}%) · "
+          f"DD {b['max_dd']}% · ขาย {b['trades']} · ถืออยู่ {len(bt['open'])}")
+    if live:
+        print(f"[pf] live ตั้งแต่ {LIVE_SINCE} · NAV {live['pl']['nav']:,.0f} · ขาย {len(live['trades'])} · "
+              f"On Position {len(live['open'])} · คำสั่งรอส่ง {len(live['pending'])}")
     if proxy_missing:
         print(f"[pf] ไม่มีราคา ETF ตัวแทน {sorted(set(proxy_missing))} — ใช้ราคาตัวต้นทางแทน")
     print(f"[ok] เขียน {OUT}")
