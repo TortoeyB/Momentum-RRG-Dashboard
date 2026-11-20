@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RRG Momentum Backtest 2025–2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+(function(){try{var t=localStorage.getItem('rrg-theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}})();
+</script>
+<style>
+:root{
+  --bg:#0b0f14; --card:#11161d; --card2:#161c25; --border:#232b36;
+  --ink:#e8eaed; --ink2:#9aa4b2; --ink3:#6b7684; --accent:#f0a04b; --grid:#1d242e;
+  /* เส้นพอร์ต / S&P ผ่าน CVD check บนพื้น #11161d · EW = เทากลาง (เส้นประ) */
+  --s-pf:#d9772b; --s-spx:#4f8ff7; --s-ew:#8b95a3;
+  /* กำไร = เขียว · ขาดทุน = แดง (ตามที่ผู้ใช้เลือก) — ตัวเลขมีเครื่องหมาย +/− กำกับเสมอ จึงไม่พึ่งสีอย่างเดียว */
+  --pos:#22c55e; --neg:#ef4444;
+  --g-lead:#22c55e; --g-imp:#60a5fa; --g-weak:#f59e0b; --g-lag:#ef4444; --on-fill:#000;
+  color-scheme:dark;
+}
+html[data-theme="light"]{
+  --bg:#f5f6f8; --card:#ffffff; --card2:#eef1f4; --border:#d5dbe3;
+  --ink:#161b22; --ink2:#3f4a57; --ink3:#5f6b7a; --accent:#c2410c; --grid:#e6eaef;
+  --s-pf:#c2410c; --s-spx:#2563eb; --s-ew:#6b7280;
+  --pos:#15803d; --neg:#c62828;
+  --g-lead:#15803d; --g-imp:#1d4ed8; --g-weak:#b45309; --g-lag:#c62828; --on-fill:#fff;
+  color-scheme:light;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans Thai',sans-serif;
+  font-size:16px;line-height:1.6;padding:20px clamp(12px,3vw,36px) 60px}
+.mono{font-family:'IBM Plex Mono',monospace}
+header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+h1{font-size:23px;font-weight:600}
+h1 .dot{color:var(--accent)}
+.hdr-actions{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.hdr-btn{background:var(--card2);border:1px solid var(--border);color:var(--ink);border-radius:9px;
+  padding:7px 15px;font-size:15.5px;font-weight:500;font-family:inherit;cursor:pointer;text-decoration:none;
+  display:inline-flex;align-items:center;gap:6px;line-height:1.3}
+.hdr-btn:hover{border-color:var(--accent);color:var(--accent)}
+.hdr-btn.accent{border-color:var(--accent);color:var(--accent)}
+.meta{color:var(--ink2);font-size:14px;margin-bottom:14px}
+h2{font-size:18px;font-weight:600;color:var(--accent);margin:28px 0 10px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+h2 .sub{color:var(--ink2);font-weight:400;font-size:14px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+.note{background:var(--card2);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:8px;
+  padding:10px 14px;font-size:14.5px;color:var(--ink2)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.tile{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
+.tile .v{font-size:26px;font-weight:600;font-family:'IBM Plex Mono',monospace;line-height:1.2}
+.tile .k{color:var(--ink2);font-size:14px}
+.tile .s{color:var(--ink3);font-size:13px;margin-top:2px}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:14.5px;color:var(--ink2);margin-bottom:8px}
+.legend .key{display:inline-flex;align-items:center;gap:7px}
+.legend .ln{width:22px;height:0;border-top:3px solid}
+.legend .ln.dash{border-top-style:dashed}
+.chartbox{position:relative;height:360px}
+.chartbox.sm{height:180px}
+.chartbox.px{height:340px}
+.controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.controls .lbl{color:var(--ink2);font-size:14px}
+select{background:var(--card2);border:1px solid var(--border);color:var(--ink);border-radius:8px;
+  padding:6px 10px;font-size:15px;font-family:inherit}
+.chip{background:var(--card2);border:1px solid var(--border);color:var(--ink2);border-radius:8px;
+  padding:5px 14px;font-size:14.5px;cursor:pointer;font-family:inherit}
+.chip.on{background:var(--accent);color:var(--on-fill);border-color:var(--accent);font-weight:600}
+.tblwrap{overflow:auto}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{padding:7px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--grid)}
+th{color:var(--ink2);font-weight:500;font-size:13.5px;position:sticky;top:0;background:var(--card)}
+td:first-child,th:first-child{text-align:left}
+th.sortable{cursor:pointer;user-select:none}
+th.sortable:hover,th.sortable.on{color:var(--accent)}
+th .arw{font-size:11px;opacity:.55} th.on .arw{opacity:1}
+td.l,th.l{text-align:left}
+tbody tr{cursor:pointer}
+tbody tr:hover td{background:var(--card2)}
+tbody tr.sel td{background:var(--card2);box-shadow:inset 3px 0 0 var(--accent)}
+.pos{color:var(--pos)} .neg{color:var(--neg)} .dim{color:var(--ink3)}
+.grade{font-weight:600;font-size:13px;border-radius:20px;padding:1px 9px;border:1px solid var(--border);display:inline-block}
+.g-BUY{color:var(--on-fill);background:var(--g-lead);border-color:var(--g-lead)}
+.g-ACCUM{color:var(--g-lead);border-color:var(--g-lead)}
+.g-ACCUM→BUY{color:var(--g-lead);border-color:var(--g-lead)}
+.err{color:var(--neg);padding:30px 0}
+tfoot td{border-top:2px solid var(--border);border-bottom:none;font-weight:600;color:var(--ink);padding-top:10px}
+tfoot tr{cursor:default}
+.st{font-weight:600;font-size:13px;border-radius:20px;padding:1px 9px;border:1px solid var(--border);display:inline-block}
+.st-on{color:var(--accent);border-color:var(--accent)}
+.st-off{color:var(--ink2)}
+.empty{color:var(--ink3);padding:10px 0;font-size:14.5px}
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:4px 24px;font-size:14.5px;color:var(--ink2)}
+.rules b{color:var(--ink);font-weight:500}
+</style>
+<style>
+.cmp td.hl,.cmp th.hl{background:var(--card2)}
+.split-note{font-size:14px;color:var(--ink2);margin:6px 0 0}
+.tag{font-size:12.5px;font-weight:600;border-radius:20px;padding:1px 9px;border:1px solid var(--border);display:inline-block;color:var(--ink2)}
+.tag.oos{color:var(--s-spx);border-color:var(--s-spx)}
+.tag.is{color:var(--accent);border-color:var(--accent)}
+tr.cur td{background:var(--card2);font-weight:600}
+.g-WATCH{color:var(--g-imp);border-color:var(--g-imp)} .g-HOLD{color:var(--ink2)} .g-NONE{color:var(--ink3)}
+.g-REDUCE{color:var(--g-weak);border-color:var(--g-weak)} .g-SELL{color:var(--on-fill);background:var(--g-lag);border-color:var(--g-lag)}
+.heat td.v{min-width:64px;font-family:'IBM Plex Mono',monospace}
+tbody tr{cursor:default}
+</style>
+</head>
+<body>
+<header>
+  <h1>Backtest 2025–2026 <span class="dot">·</span> RRG</h1>
+  <div class="hdr-actions">
+    <a class="hdr-btn accent" href="portfolio.html">← Momentum Portfolio</a>
+    <a class="hdr-btn" href="performance.html">📈 Signal Performance</a>
+    <a class="hdr-btn" href="index.html">Dashboard</a>
+    <button class="hdr-btn" id="themeBtn" type="button" aria-label="สลับโหมดสว่าง/มืด"></button>
+  </div>
+</header>
+<div class="meta" id="meta">กำลังโหลด…</div>
+<div id="app"></div>
+
+<script>
+"use strict";
+let D = null, charts = {};
+const el = (tag, attrs = {}, ...kids) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v; else if (k === "text") e.textContent = v; else e.setAttribute(k, v);
+  }
+  for (const k of kids) if (k != null) e.append(k);
+  return e;
+};
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt = (v, d = 2) => v == null ? "—" : (v > 0 ? "+" : "") + v.toFixed(d);
+const pctTd = (v, extra = "") => el("td", {class: "mono " + extra + " " + (v == null ? "dim" : v > 0 ? "pos" : v < 0 ? "neg" : ""), text: v == null ? "—" : fmt(v) + "%"});
+const td = (t, cls = "mono") => el("td", {class: cls, text: t == null ? "—" : String(t)});
+const th = (t, cls = "") => el("th", {class: cls, text: t});
+function section(title, sub) {
+  const body = el("div");
+  document.getElementById("app").append(el("h2", {}, el("span", {text: title}), sub ? el("span", {class: "sub", text: sub}) : null), body);
+  return body;
+}
+const tipStyle = () => ({backgroundColor: css("--card2"), borderColor: css("--border"), borderWidth: 1,
+  titleColor: css("--ink"), bodyColor: css("--ink2"), titleFont: {size: 14}, bodyFont: {size: 14}, padding: 10});
+const PNAME = {oos: "Out-of-sample", is: "In-sample", all: "ทั้งช่วง"};
+
+function renderSummary(host) {
+  const P = D.periods, o = P.oos || {}, i = P.is || {};
+  const tag = k => el("span", {class: "tag " + k, text: PNAME[k]});
+  const t = el("table", {class: "cmp"}, el("thead", {}, el("tr", {}, th("ช่วง"), th("วันที่", "l"), th("วันทำการ"),
+    th("พอร์ต"), th("S&P 500"), th("ชนะ S&P"), th("EW watchlist"), th("DD พอร์ต"), th("DD S&P"))));
+  const tb = el("tbody");
+  const rows = [["oos", tag("oos")], ["is", tag("is")], ["all", PNAME.all],
+    ...Object.keys(P).filter(k => /^\d{4}$/.test(k)).map(k => [k, "ปี " + k])];
+  for (const [k, label] of rows) {
+    const r = P[k]; if (!r || r.pf == null) continue;
+    tb.append(el("tr", {}, el("td", {}, label), td(`${r.from} → ${r.to}`, "l mono dim"), td(r.days),
+      pctTd(r.pf, "hl"), pctTd(r.spx), pctTd(r.pf - r.spx), pctTd(r.ew), pctTd(r.pf_dd), pctTd(r.spx_dd)));
+  }
+  t.append(tb);
+  host.append(el("div", {class: "card tblwrap"}, t),
+    el("div", {class: "split-note", text:
+      `Out-of-sample = ${o.from ?? "—"} → ${o.to ?? "—"} ช่วงที่ไม่เคยใช้ออกแบบกติกา (ตัวชี้วัดหลัก) · ` +
+      `In-sample = ตั้งแต่ ${D.split} ช่วงที่ใช้ตั้งกติกาชุดที่ 2 ผลจึงดูดีเกินจริง`}));
+}
+
+const splitLine = {id: "split", afterDatasetsDraw(c) {
+  const i = c.data.labels.findIndex(d => d >= D.split); if (i < 0) return;
+  const {ctx, chartArea: a, scales: {x}} = c, px = x.getPixelForValue(i);
+  ctx.save(); ctx.fillStyle = css("--accent") + "12"; ctx.fillRect(px, a.top, a.right - px, a.bottom - a.top);
+  ctx.strokeStyle = css("--accent"); ctx.setLineDash([5, 4]); ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(px, a.top); ctx.lineTo(px, a.bottom); ctx.stroke(); ctx.setLineDash([]);
+  if (c.canvas.dataset.labelled) {
+    ctx.font = "500 13px 'IBM Plex Sans Thai', sans-serif"; ctx.textAlign = "right"; ctx.fillStyle = css("--s-spx");
+    ctx.fillText("◀ out-of-sample", px - 8, a.top + 16);
+    ctx.textAlign = "left"; ctx.fillStyle = css("--accent"); ctx.fillText("in-sample ▶", px + 8, a.top + 16);
+  }
+  ctx.restore(); }};
+const crosshair = {id: "xh", afterDatasetsDraw(c) {
+  const a = c.tooltip && c.tooltip.getActiveElements(); if (!a || !a.length) return;
+  const x = a[0].element.x, {top, bottom} = c.chartArea, ctx = c.ctx;
+  ctx.save(); ctx.strokeStyle = css("--ink3"); ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke(); ctx.restore(); }};
+
+function renderCurve(host) {
+  const C = D.curve, b = C[0], labels = C.map(r => r.d);
+  const S = [["pf", "พอร์ต (กติกาชุดที่ 2)", css("--s-pf"), false, 2.5], ["spx", "S&P 500", css("--s-spx"), false, 2], ["ew", "ถือทุกตัวเท่ากัน (EW)", css("--s-ew"), true, 2]];
+  host.append(el("div", {class: "legend"}, ...S.map(([, n, c, dash]) => el("span", {class: "key"},
+    el("span", {class: "ln" + (dash ? " dash" : ""), style: `border-top-color:${c}`}), el("span", {text: n})))));
+  const cv = el("canvas", {"data-labelled": "1", role: "img", "aria-label": "ผลตอบแทนสะสมของพอร์ต backtest เทียบ S&P 500"});
+  const cv2 = el("canvas", {role: "img", "aria-label": "Drawdown ของพอร์ต backtest เทียบ S&P 500"});
+  host.append(el("div", {class: "card"}, el("div", {class: "chartbox"}, cv),
+    el("div", {class: "meta", style: "margin:10px 0 4px", text: "Drawdown — ลดลงจากจุดสูงสุดเดิม"}), el("div", {class: "chartbox sm"}, cv2)));
+  const xs = () => ({grid: {display: false}, ticks: {color: css("--ink2"), font: {size: 13}, maxTicksLimit: 9, maxRotation: 0}});
+  const ys = (t) => ({grid: {color: css("--grid")}, ticks: {color: css("--ink2"), font: {size: 13}, callback: v => v + "%"},
+    title: t ? {display: true, text: t, color: css("--ink2"), font: {size: 13}} : undefined});
+  charts.c1 = new Chart(cv, {type: "line", data: {labels, datasets: S.map(([k, n, c, dash, w]) => ({label: n,
+      data: C.map(r => (r[k] / b[k] - 1) * 100), borderColor: c, backgroundColor: c, borderWidth: w, borderDash: dash ? [6, 4] : [], pointRadius: 0, pointHitRadius: 8, tension: .1}))},
+    options: {maintainAspectRatio: false, animation: false, interaction: {mode: "index", intersect: false},
+      plugins: {legend: {display: false}, tooltip: {...tipStyle(), callbacks: {label: c => ` ${c.dataset.label}  ${fmt(c.raw)}%`,
+        afterBody: it => [`ลงทุนอยู่ ${C[it[0].dataIndex].inv}%`]}}},
+      scales: {x: xs(), y: ys("ผลตอบแทนสะสม")}}, plugins: [splitLine, crosshair]});
+  const dd = k => { let pk = -Infinity; return C.map(r => { pk = Math.max(pk, r[k]); return (r[k] / pk - 1) * 100; }); };
+  charts.c2 = new Chart(cv2, {type: "line", data: {labels, datasets: [
+      {label: "พอร์ต", data: dd("pf"), borderColor: css("--s-pf"), backgroundColor: css("--s-pf") + "33", fill: "origin", borderWidth: 1.5, pointRadius: 0, pointHitRadius: 8},
+      {label: "S&P 500", data: dd("spx"), borderColor: css("--s-spx"), borderWidth: 1.5, pointRadius: 0, pointHitRadius: 8}]},
+    options: {maintainAspectRatio: false, animation: false, interaction: {mode: "index", intersect: false},
+      plugins: {legend: {display: false}, tooltip: {...tipStyle(), callbacks: {label: c => ` ${c.dataset.label}  ${c.raw.toFixed(2)}%`}}},
+      scales: {x: xs(), y: ys(null)}}, plugins: [splitLine, crosshair]});
+}
+
+function renderMonthly(host) {
+  const M = D.monthly, max = Math.max(1, ...M.map(m => Math.abs(m.pf ?? 0)), ...M.map(m => Math.abs(m.spx ?? 0)));
+  const years = [...new Set(M.map(m => m.month.slice(0, 4)))];
+  const t = el("table", {class: "heat"}, el("thead", {}, el("tr", {}, th("ปี / เดือน"),
+    ...["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."].map(m => th(m)))));
+  const tb = el("tbody");
+  const cell = v => { const c = el("td", {class: "v", text: v == null ? "" : fmt(v, 1)});
+    if (v != null) { const a = Math.round(Math.min(1, Math.abs(v) / max) * .45 * 255).toString(16).padStart(2, "0");
+      c.style.background = (v >= 0 ? css("--pos") : css("--neg")) + a; } return c; };
+  for (const y of years) for (const [k, name] of [["pf", "พอร์ต"], ["spx", "S&P"]]) {
+    const by = Object.fromEntries(M.filter(m => m.month.startsWith(y)).map(m => [+m.month.slice(5), m[k]]));
+    tb.append(el("tr", {}, el("td", {class: "l" + (k === "spx" ? " dim" : ""), text: `${y} ${name}`}),
+      ...Array.from({length: 12}, (_, i) => cell(by[i + 1]))));
+  }
+  t.append(tb);
+  host.append(el("div", {class: "card tblwrap"}, t));
+}
+
+function renderGrades(host) {
+  const G = ["BUY", "ACCUM", "WATCH", "HOLD", "NONE", "REDUCE", "SELL"];
+  const cols = [["oos", "Out-of-sample"], ["is", "In-sample"]];
+  const t = el("table", {}, el("thead", {}, el("tr", {}, th("เกรด"),
+    ...cols.flatMap(([, n]) => [th(n + " · n"), th("Excess 20D"), th("ชนะตลาด")]))));
+  const tb = el("tbody");
+  for (const g of G) {
+    const row = el("tr", {}, el("td", {}, el("span", {class: "grade g-" + g, text: g === "NONE" ? "ไม่มีสัญญาณ" : g})));
+    for (const [k] of cols) {
+      const r = (D.grades[k] || []).find(x => x.grade === g); const h = r ? r.h["20"] : {};
+      row.append(td(h.n ?? "—"), pctTd(h.xs), td(h.hit == null ? "—" : h.hit + "%"));
+    }
+    tb.append(row);
+  }
+  t.append(tb);
+  host.append(el("div", {class: "card tblwrap"}, t));
+}
+
+function renderTrades(host) {
+  const T = D.trade_stats, cols = [["oos", "Out-of-sample"], ["is", "In-sample"], ["all", "ทั้งช่วง"]];
+  const lines = [["จำนวนรายการขาย", r => r.n], ["กำไร %", r => r.win + "%"], ["ต่อรายการเฉลี่ย", r => fmt(r.avg) + "%"],
+    ["กำไรเฉลี่ย", r => fmt(r.avg_win) + "%"], ["ขาดทุนเฉลี่ย", r => fmt(r.avg_loss) + "%"],
+    ["Profit factor", r => r.pf == null ? "—" : r.pf.toFixed(2)], ["ถือเฉลี่ย (วัน)", r => r.bars],
+    ["เหตุผลขาย", r => Object.entries(r.reasons || {}).map(([k, v]) => `${k} ${v}`).join(" · ")]];
+  const t = el("table", {}, el("thead", {}, el("tr", {}, th(""), ...cols.map(([, n]) => th(n)))));
+  const tb = el("tbody");
+  for (const [label, f] of lines) tb.append(el("tr", {}, el("td", {text: label}),
+    ...cols.map(([k]) => { const c = td(T[k] ? f(T[k]) : "—", label === "เหตุผลขาย" ? "l" : "mono");
+      if (label === "เหตุผลขาย") c.style.whiteSpace = "normal"; return c; })));
+  t.append(tb);
+  host.append(el("div", {class: "card tblwrap"}, t));
+}
+
+function renderSens(host) {
+  const t = el("table", {}, el("thead", {}, el("tr", {}, th("ถือสูงสุด"), th("Stop loss"),
+    th("Out-of-sample"), th("DD"), th("In-sample"), th("DD"))));
+  const tb = el("tbody");
+  for (const r of D.sensitivity) tb.append(el("tr", {class: r.current ? "cur" : ""},
+    el("td", {text: (typeof r.hold === "number" ? r.hold + " วัน" : r.hold) + (r.current ? "  ← กติกาปัจจุบัน" : "")}),
+    td(r.stop == null ? "ไม่มี" : "−" + r.stop + "%"), pctTd(r.oos), pctTd(r.oos_dd), pctTd(r.is), pctTd(r.is_dd)));
+  t.append(tb);
+  host.append(el("div", {class: "card tblwrap"}, t), el("div", {class: "split-note", text:
+    "ใช้ดูว่ากติกาปัจจุบันอยู่ในโซนที่ผลนิ่งหรือไม่ ถ้าค่าข้าง ๆ ได้ใกล้กันแปลว่าไม่ได้บังเอิญ — ไม่ควรเลือกช่องที่ดีที่สุดมาใช้ทันที เพราะจะกลายเป็นการจูนให้เข้ากับอดีต"}));
+}
+
+function renderAgree(host) {
+  if (!D.agreement || !D.agreement.length) { host.append(el("div", {class: "empty", text: "ไม่มีสัญญาณจริงให้เทียบ"})); return; }
+  const t = el("table", {}, el("thead", {}, el("tr", {}, th("เวอร์ชันสัญญาณจริง", "l"), th("วัน×ตัวที่เทียบ"), th("เกรดตรงกัน"))));
+  const tb = el("tbody");
+  for (const a of D.agreement) tb.append(el("tr", {}, td(a.version, "l mono"), td(a.rows.toLocaleString()), td(a.same + "%")));
+  t.append(tb);
+  host.append(el("div", {class: "card tblwrap"}, t), el("div", {class: "split-note", text:
+    "v1.2 ควรตรงกันเกือบทั้งหมด (ต่างได้เล็กน้อยเพราะ replay ใช้ข้อมูลย้อนยาวกว่า ค่า EMA ตั้งต้นจึงต่างนิดหน่อย) · v1/v1.1 ต่างมากกว่าเพราะ logic ตอนนั้นยังไม่เหมือนปัจจุบัน"}));
+}
+
+function build() {
+  Object.values(charts).forEach(c => c.destroy()); charts = {};
+  const app = document.getElementById("app"); app.replaceChildren();
+  const R = D.rules_detail;
+  document.getElementById("meta").textContent =
+    `${D.range[0]} → ${D.range[1]} · ${D.symbols} symbols · ${D.episodes.toLocaleString()} episodes · สัญญาณ ${D.signal_version} · อัปเดต ${D.generated_at}` + (D.demo ? " · ⚠️ ข้อมูลจำลอง" : "");
+  app.append(el("div", {class: "note", text:
+    `จำลองย้อนหลังว่า ถ้ามีระบบสัญญาณ v1.2 และพอร์ตกติกาชุดที่ 2 (BUY ${R.w_buy}% · ACCUM ${R.w_accum}% · REDUCE ลด 1/3 · stop −${R.stop}% · ถือสูงสุด ${R.hold} วัน · ` +
+    `สูงสุด ${R.max_pos} ตัว · ค่าธรรมเนียม ${R.cost}%) ตั้งแต่ต้นปี 2025 จะได้ผลอย่างไร · ` +
+    "ข้อจำกัด: ใช้ watchlist ปัจจุบัน (survivorship bias — ผลมักดูดีเกินจริง) · เป็นสัญญาณที่ logic ปัจจุบัน “จะให้” ไม่ใช่ที่เคยแสดงจริง · ไม่ใช่คำแนะนำการลงทุน"}));
+  renderSummary(section("สรุปตามช่วงเวลา", "ดู Out-of-sample เป็นหลัก"));
+  renderCurve(section("เส้นพอร์ต", "ผลตอบแทนสะสมเทียบ S&P 500"));
+  renderMonthly(section("ผลตอบแทนรายเดือน", "% ต่อเดือน · เขียว = บวก แดง = ลบ"));
+  renderGrades(section("คุณภาพสัญญาณตามเกรด", "Excess เทียบ S&P 500 ถือ 20 วัน"));
+  renderTrades(section("สถิติการเทรด"));
+  renderSens(section("ถ้าเปลี่ยนกติกา", "ถือสูงสุด × stop loss"));
+  renderAgree(section("ตรวจความถูกต้องของ replay", "เทียบเกรดที่จำลองกับสัญญาณที่บันทึกจริง วันที่ซ้อนกัน"));
+}
+function themeLabel() { document.getElementById("themeBtn").textContent = document.documentElement.dataset.theme === "light" ? "🌙 โหมดมืด" : "☀️ โหมดสว่าง"; }
+document.getElementById("themeBtn").onclick = () => {
+  const t = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+  document.documentElement.dataset.theme = t; try { localStorage.setItem("rrg-theme", t); } catch (e) {}
+  themeLabel(); if (D) build(); };
+themeLabel();
+fetch("backtest.json?v=" + Date.now()).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then(d => { D = d; build(); })
+  .catch(e => { document.getElementById("meta").textContent = "";
+    document.getElementById("app").append(el("div", {class: "err", text: "ยังไม่มีผล backtest (" + e.message + ") — ไปที่ GitHub → Actions → Backtest replay → Run workflow"})); });
+</script>
+</body>
+</html>

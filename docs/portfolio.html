@@ -85,6 +85,14 @@ tbody tr.sel td{background:var(--card2);box-shadow:inset 3px 0 0 var(--accent)}
 .g-ACCUM{color:var(--g-lead);border-color:var(--g-lead)}
 .g-ACCUM→BUY{color:var(--g-lead);border-color:var(--g-lead)}
 .err{color:var(--neg);padding:30px 0}
+.vtabs{display:flex;gap:8px;margin:4px 0 14px;flex-wrap:wrap}
+.vtab{background:var(--card2);border:1px solid var(--border);color:var(--ink2);border-radius:10px;padding:9px 18px;
+  font-size:16px;font-weight:600;font-family:inherit;cursor:pointer;display:inline-flex;gap:8px;align-items:center}
+.vtab .sub{font-weight:400;font-size:13px;color:var(--ink3)}
+.vtab.on.live{border-color:var(--pos);color:var(--pos);background:var(--card)}
+.vtab.on.bt{border-color:var(--s-spx);color:var(--s-spx);background:var(--card)}
+.vtab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.empty-live{background:var(--card);border:1px dashed var(--border);border-radius:12px;padding:18px;color:var(--ink2);font-size:15px}
 tfoot td{border-top:2px solid var(--border);border-bottom:none;font-weight:600;color:var(--ink);padding-top:10px}
 tfoot tr{cursor:default}
 .st{font-weight:600;font-size:13px;border-radius:20px;padding:1px 9px;border:1px solid var(--border);display:inline-block}
@@ -102,6 +110,7 @@ tfoot tr{cursor:default}
   <div class="hdr-actions">
     <a class="hdr-btn accent" href="index.html">← Dashboard</a>
     <a class="hdr-btn" href="performance.html">📈 Signal Performance</a>
+    <a class="hdr-btn" href="backtest.html">🧪 Backtest 2025–2026</a>
     <button class="hdr-btn" id="themeBtn" type="button" aria-label="สลับโหมดสว่าง/มืด"></button>
   </div>
 </header>
@@ -110,7 +119,7 @@ tfoot tr{cursor:default}
 
 <script>
 "use strict";
-let D = null, charts = {}, SEL = null, SELTRADE = null, SK = "entry", SDIR = -1;
+let D = null, V = null, VIEW = "live", charts = {}, SEL = null, SELTRADE = null, SK = "entry", SDIR = -1;
 
 const el = (tag, attrs = {}, ...kids) => {
   const e = document.createElement(tag);
@@ -144,7 +153,7 @@ const tipStyle = () => ({backgroundColor: css("--card2"), borderColor: css("--bo
 
 // ---------------- สถานะพอร์ตปัจจุบัน (P/L) ----------------
 function renderPL(host) {
-  const L = D.pl; if (!L) return;
+  const L = V.pl; if (!L) return;
   const sign = v => v == null ? "" : v > 0 ? "pos" : v < 0 ? "neg" : "";
   const sm = v => v == null ? "—" : (v > 0 ? "+" : "") + money(v);
   const tile = (k, v, s, cls = "") => el("div", {class: "tile"}, el("div", {class: "k", text: k}),
@@ -160,15 +169,12 @@ function renderPL(host) {
 
 // ---------------- สรุปตัวเลข ----------------
 function renderTiles(host) {
-  const S = D.stats, P = S.portfolio;
+  const S = V.stats, P = S.portfolio;
   const tile = (k, v, s, cls = "") => el("div", {class: "tile"}, el("div", {class: "k", text: k}),
     el("div", {class: "v " + cls, text: v}), s ? el("div", {class: "s", text: s}) : null);
   const sign = v => v == null ? "" : v > 0 ? "pos" : v < 0 ? "neg" : "";
-  const L = S.live, since = D.rules.live_since;
   host.append(el("div", {class: "tiles"},
-    L ? tile(`ใช้จริงตั้งแต่ ${since}`, fmt(L.ret) + "%", `S&P 500 ${fmt(L.spx)}% · ${L.days} วัน · ขาย ${L.trades} ครั้ง`, sign(L.ret))
-      : tile(`ใช้จริงตั้งแต่ ${since}`, "รอข้อมูล", "เริ่มนับจากวันทำการแรก", ""),
-    tile("ทั้งช่วง (รวม backtest)", fmt(P.ret) + "%", `S&P 500 ${fmt(S.spx.ret)}% · EW ${fmt(S.ew.ret)}% · ชนะ S&P ${fmt(P.ret - S.spx.ret)}%`, sign(P.ret)),
+    tile("ผลตอบแทน backtest", fmt(P.ret) + "%", `S&P 500 ${fmt(S.spx.ret)}% · EW ${fmt(S.ew.ret)}% · ชนะ S&P ${fmt(P.ret - S.spx.ret)}%`, sign(P.ret)),
     tile("Max drawdown", fmt(P.max_dd) + "%", `S&P ${fmt(S.spx.max_dd)}% · EW ${fmt(S.ew.max_dd)}%`),
     tile("รายการขาย", String(P.trades), `กำไร ${P.win_rate ?? "—"}% · ถือเฉลี่ย ${P.avg_bars ?? "—"} วัน · นับขายบางส่วนแยก`),
     tile("ต่อเทรด", fmt(P.avg_trade) + "%", `ชนะเฉลี่ย ${fmt(P.avg_win)}% · แพ้เฉลี่ย ${fmt(P.avg_loss)}%`, sign(P.avg_trade)),
@@ -176,9 +182,22 @@ function renderTiles(host) {
     tile("ลงทุนเฉลี่ย", (P.exposure ?? "—") + "%", "ที่เหลือเป็นเงินสด 0%")));
 }
 
+function renderLiveTiles(host) {
+  const S = V.stats, P = S.portfolio;
+  const tile = (k, v, s, cls = "") => el("div", {class: "tile"}, el("div", {class: "k", text: k}),
+    el("div", {class: "v " + cls, text: v}), s ? el("div", {class: "s", text: s}) : null);
+  const sign = v => v == null ? "" : v > 0 ? "pos" : v < 0 ? "neg" : "";
+  host.append(el("div", {class: "tiles"},
+    tile("ผลตอบแทนตั้งแต่เริ่ม", fmt(P.ret) + "%", `S&P 500 ${fmt(S.spx.ret)}% · ชนะ S&P ${fmt(P.ret - S.spx.ret)}%`, sign(P.ret)),
+    tile("Max drawdown", fmt(P.max_dd) + "%", `S&P ${fmt(S.spx.max_dd)}%`),
+    tile("รายการขาย", String(P.trades), P.trades ? `กำไร ${P.win_rate}% · ถือเฉลี่ย ${P.avg_bars} วัน` : "ยังไม่มี"),
+    tile("ต่อรายการ", fmt(P.avg_trade) + "%", P.trades ? `ชนะเฉลี่ย ${fmt(P.avg_win)}% · แพ้เฉลี่ย ${fmt(P.avg_loss)}%` : "", sign(P.avg_trade)),
+    tile("ลงทุนเฉลี่ย", (P.exposure ?? "—") + "%", "ที่เหลือเป็นเงินสด 0%")));
+}
+
 // ---------------- กราฟเส้นพอร์ต + drawdown ----------------
 function renderEquity(host) {
-  const C = D.curve, base = C[0];
+  const C = V.curve, base = C[0];
   const pct = (v, b) => v == null || b == null ? null : (v / b - 1) * 100;
   const series = [
     ["pf", "พอร์ตจำลอง", css("--s-pf"), false, 2.5],
@@ -201,7 +220,7 @@ function renderEquity(host) {
         label: c => ` ${c.dataset.label}  ${fmt(c.raw)}%`,
         afterBody: it => { const r = C[it[0].dataIndex]; return [`ลงทุนอยู่ ${r.inv}% · ${r.n} ตัว`]; }}}},
       scales: {x: xTime(), y: axis("ผลตอบแทนสะสม", v => v + "%")}},
-    plugins: [liveLine, crosshair]});
+    plugins: VIEW === "bt" ? [liveLine, crosshair] : [crosshair]});
   const dd = k => { let pk = -Infinity; return C.map(r => { pk = Math.max(pk, r[k]); return (r[k] / pk - 1) * 100; }); };
   charts.dd = new Chart(cv2, {type: "line",
     data: {labels, datasets: [
@@ -210,7 +229,7 @@ function renderEquity(host) {
     options: {maintainAspectRatio: false, animation: false, interaction: {mode: "index", intersect: false},
       plugins: {legend: {display: false}, tooltip: {...tipStyle(), callbacks: {label: c => ` ${c.dataset.label}  ${c.raw.toFixed(2)}%`}}},
       scales: {x: xTime(), y: axis(null, v => v + "%")}},
-    plugins: [liveLine, crosshair]});
+    plugins: VIEW === "bt" ? [liveLine, crosshair] : [crosshair]});
 }
 // เส้นแบ่ง: ก่อนหน้า = backtest ที่รู้ผลแล้ว · หลัง = ใช้จริง
 const liveLine = {id: "live", afterDatasetsDraw(c) {
@@ -235,7 +254,7 @@ const crosshair = {id: "xh", afterDatasetsDraw(c) {
   ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke(); ctx.restore(); }};
 
 // ---------------- จุดซื้อ/ขาย บนกราฟราคา ----------------
-function allTrades() { return [...D.open, ...D.trades]; }
+function allTrades() { return [...V.open, ...V.trades]; }
 function renderPx(host) {
   host.replaceChildren();
   const insts = [...new Set(allTrades().sort((a, b) => b.entry.localeCompare(a.entry)).map(t => t.inst))];
@@ -329,27 +348,27 @@ function pickTrade(t) {
 let openHost = null;
 function renderOpen(host) {
   host.replaceChildren();
-  if (!D.open.length) host.append(el("div", {class: "empty", text: "ไม่มี position — ทั้งพอร์ตเป็นเงินสด"}));
+  if (!V.open.length) host.append(el("div", {class: "empty", text: "ไม่มี position — ทั้งพอร์ตเป็นเงินสด"}));
   else {
-    const t = tradeTable([...D.open].sort((a, b) => b.ret - a.ret), false, pickTrade);
+    const t = tradeTable([...V.open].sort((a, b) => b.ret - a.ret), false, pickTrade);
     // แถวรวม: ใช้ตัวเลขชุดเดียวกับช่อง Unrealized P/L ด้านบน จะได้ตรงกันเสมอ
-    const L = D.pl || {}, w = D.open.reduce((a, o) => a + (o.weight || 0), 0);
+    const L = V.pl || {}, w = V.open.reduce((a, o) => a + (o.weight || 0), 0);
     const u = L.unrealized, cls = u > 0 ? "pos" : u < 0 ? "neg" : "";
     t.append(el("tfoot", {}, el("tr", {},
-      el("td", {colspan: "6", class: "l", text: `รวม Unrealized P/L · ${D.open.length} ตัว`}),
+      el("td", {colspan: "6", class: "l", text: `รวม Unrealized P/L · ${V.open.length} ตัว`}),
       td(w.toFixed(1) + "%"),
       el("td", {class: "mono " + cls, text: L.unrealized_pct == null ? "—" : fmt(L.unrealized_pct) + "%"}),
       el("td", {class: "mono " + cls, text: u == null ? "—" : (u > 0 ? "+" : "") + money(u)}),
       el("td", {}))));
     host.append(el("div", {class: "card tblwrap"}, t));
   }
-  if (D.pending.length) host.append(el("div", {class: "meta", style: "margin-top:8px",
-    text: "คำสั่งรอส่งพรุ่งนี้: " + D.pending.map(o => `${o.side === "buy" ? "ซื้อ" : "ขาย"} ${o.inst}${o.grade ? " (" + o.grade + ")" : o.reason ? " (" + o.reason + ")" : ""}`).join(" · ")}));
+  if (V.pending.length) host.append(el("div", {class: "meta", style: "margin-top:8px",
+    text: "คำสั่งรอส่งพรุ่งนี้: " + V.pending.map(o => `${o.side === "buy" ? "ซื้อ" : "ขาย"} ${o.inst}${o.grade ? " (" + o.grade + ")" : o.reason ? " (" + o.reason + ")" : ""}`).join(" · ")}));
 }
 function renderLog(host) {
   host.replaceChildren();
   const val = (t, k) => k === "exit" ? (t.open ? "9999" : t.exit) : t[k];
-  const rows = [...D.trades].sort((a, b) => {
+  const rows = [...V.trades].sort((a, b) => {
     const x = val(a, SK), y = val(b, SK);
     if (x == null) return 1; if (y == null) return -1;
     return (typeof x === "string" ? x.localeCompare(y) : x - y) * SDIR || b.entry.localeCompare(a.entry);
@@ -366,7 +385,7 @@ function renderRules(host) {
   host.append(el("div", {class: "card"}, el("div", {class: "rules"},
     li("เข้า", `BUY ซื้อ ${R.w_buy}% ของพอร์ต · ACCUM ซื้อ ${R.w_accum}% · ถือ ACCUM อยู่แล้วเจอ BUY → เติมให้เต็ม ${R.w_buy}%`),
     li("ออก", `SELL → ขายหมด · REDUCE → ลด 1/3 ของไม้เต็มต่อ REDUCE รอบใหม่ · ราคาปิดต่ำกว่าต้นทุนเฉลี่ย ${R.stop_loss}% → ขายหมด · ครบ ${R.hold_bars} วันทำการ → ขายหมด`),
-    li("จำนวนตัว", `ถือพร้อมกันได้สูงสุด ${R.max_pos} ตัว · เต็มแล้วสัญญาณใหม่จะถูกข้าม (ข้ามไป ${D.skipped_count} ครั้ง)`),
+    li("จำนวนตัว", `ถือพร้อมกันได้สูงสุด ${R.max_pos} ตัว · เต็มแล้วสัญญาณใหม่จะถูกข้าม (ข้ามไป ${V.skipped_count} ครั้ง)`),
     li("ราคาซื้อขาย", `${R.execution} · ค่าธรรมเนียม ${R.cost}% ต่อฝั่ง`),
     li("เงินทุนตั้งต้น", money(R.capital) + " · ไม่ใช้ margin · เงินสดไม่มีดอกเบี้ย"),
     li("ดัชนี/futures", `ใช้ ETF ตัวแทน: ${proxies}` + (R.proxy_missing.length ? ` (ยังไม่มีราคาของ ${R.proxy_missing.join(", ")} → ใช้ราคาตัวต้นทางแทน)` : "")),
@@ -376,19 +395,52 @@ function renderRules(host) {
 
 function build() {
   Object.keys(charts).forEach(killChart);
+  SEL = null; SELTRADE = null;
+  const hasLive = !!D.live;
+  if (!hasLive) VIEW = "bt";
+  V = VIEW === "live" ? D.live : D;
   const app = document.getElementById("app"); app.replaceChildren();
+  const R = D.rules;
+  // แท็บ: สลับทั้งหน้า — บัญชีแยกกัน ไม่มีตัวเลขปนกัน
+  const tabs = el("div", {class: "vtabs", role: "tablist"});
+  for (const [k, label, sub] of [["live", "🟢 LIVE", `ใช้จริงตั้งแต่ ${R.live_since}`],
+                                 ["bt", "🧪 BACKTEST", "จำลองย้อนหลัง"]]) {
+    if (k === "live" && !hasLive) continue;
+    const b = el("button", {class: `vtab ${k}` + (VIEW === k ? " on" : ""), role: "tab", "aria-selected": String(VIEW === k)},
+      el("span", {text: label}), el("span", {class: "sub", text: sub}));
+    b.onclick = () => { if (VIEW !== k) { VIEW = k; build(); } };
+    tabs.append(b);
+  }
+  app.append(tabs);
   document.getElementById("meta").textContent =
-    `${D.range[0]} → ${D.range[1]} · สัญญาณเข้า ${D.signals_seen} ครั้ง · อัปเดต ${D.generated_at}`;
-  app.append(el("div", {class: "note", text:
-    `พอร์ตจำลองที่ซื้อขายตามสัญญาณของ dashboard ด้วย${rulesName(D.rules.version)} — ผลก่อน ${D.rules.live_since} เป็น backtest ที่รู้ผลแล้ว ` +
-    "ผลหลังจากนั้นคือของจริง · ใช้ดูว่าระบบทำงานอย่างไร ไม่ใช่คำแนะนำการลงทุน"}));
+    `${V.range[0]} → ${V.range[1]} · สัญญาณเข้า ${V.signals_seen} ครั้ง · อัปเดต ${D.generated_at}`;
+  if (VIEW === "live") {
+    app.append(el("div", {class: "note", text:
+      `🟢 LIVE — พอร์ตจริงตาม${rulesName(R.version)} เริ่มด้วยเงินสด ${money(R.capital)} เมื่อ ${R.live_since} ` +
+      "นับเฉพาะสัญญาณที่เกิดหลังจากนั้น ไม่รับ position ต่อจาก backtest · ใช้ดูว่าระบบทำงานอย่างไร ไม่ใช่คำแนะนำการลงทุน"}));
+  } else {
+    app.append(el("div", {class: "note"},
+      document.createTextNode(`🧪 BACKTEST — ใช้${rulesName(R.version)}กับสัญญาณจริงที่บันทึกไว้ย้อนหลัง ${V.range[0]} → ${V.range[1]} ` +
+        `กติกาถูกตั้งจากข้อมูลช่วงนี้เอง ผลจึงดูดีเกินจริง (in-sample) · ดู backtest ที่ไม่เคยใช้ออกแบบกติกา (2025 – ก.ค. 2026) ได้ที่ `),
+      el("a", {href: "backtest.html", text: "🧪 Backtest 2025–2026"})));
+  }
   renderPL(section("สถานะพอร์ตปัจจุบัน", "กำไร/ขาดทุนรวม = Realized (ขายแล้ว) + Unrealized (ยังถือ ตามราคาปิดล่าสุด)"));
-  renderTiles(section("ผลงานพอร์ต"));
-  renderEquity(section("เส้นพอร์ต", "ผลตอบแทนสะสมเทียบ S&P 500 และการถือทุกตัวเท่ากัน"));
+  const liveEmpty = VIEW === "live" && V.curve.length < 2;
+  if (liveEmpty) {
+    app.append(el("div", {class: "empty-live", text:
+      `ยังไม่มีวันทำการหลังเริ่มใช้จริง — กราฟและสถิติจะเริ่มขึ้นหลังตลาดปิดวันแรก (${R.live_since}) ` +
+      "คำสั่งแรกที่รอส่งอยู่ด้านล่าง"}));
+  } else {
+    if (VIEW === "bt") renderTiles(section("ผลงานพอร์ต"));
+    else renderLiveTiles(section("ผลงานพอร์ต"));
+    renderEquity(section("เส้นพอร์ต", "ผลตอบแทนสะสมเทียบ S&P 500 และการถือทุกตัวเท่ากัน"));
+  }
   openHost = section("On Position", "Unrealized P/L ตามราคาปิดล่าสุด (ยังไม่หักค่าขาย)");
   renderOpen(openHost);
-  pxHost = section("จุดซื้อ / จุดขาย", "เลือกตัว หรือคลิกแถวในตาราง");
-  renderPx(pxHost);
+  if (V.trades.length || V.open.length) {
+    pxHost = section("จุดซื้อ / จุดขาย", "เลือกตัว หรือคลิกแถวในตาราง");
+    renderPx(pxHost);
+  }
   logHost = section("ประวัติการเทรด (Unwind)", "Realized P/L หลังหักค่าธรรมเนียมซื้อและขาย");
   renderLog(logHost);
   renderRules(section("กติกาพอร์ต"));
