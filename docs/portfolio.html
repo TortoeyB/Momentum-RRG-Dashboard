@@ -16,7 +16,8 @@
   --ink:#e8eaed; --ink2:#9aa4b2; --ink3:#6b7684; --accent:#f0a04b; --grid:#1d242e;
   /* เส้นพอร์ต / S&P ผ่าน CVD check บนพื้น #11161d · EW = เทากลาง (เส้นประ) */
   --s-pf:#d9772b; --s-spx:#4f8ff7; --s-ew:#8b95a3;
-  --pos:#4f8ff7; --neg:#d9772b;
+  /* กำไร = เขียว · ขาดทุน = แดง (ตามที่ผู้ใช้เลือก) — ตัวเลขมีเครื่องหมาย +/− กำกับเสมอ จึงไม่พึ่งสีอย่างเดียว */
+  --pos:#22c55e; --neg:#ef4444;
   --g-lead:#22c55e; --g-imp:#60a5fa; --g-weak:#f59e0b; --g-lag:#ef4444; --on-fill:#000;
   color-scheme:dark;
 }
@@ -24,7 +25,7 @@ html[data-theme="light"]{
   --bg:#f5f6f8; --card:#ffffff; --card2:#eef1f4; --border:#d5dbe3;
   --ink:#161b22; --ink2:#3f4a57; --ink3:#5f6b7a; --accent:#c2410c; --grid:#e6eaef;
   --s-pf:#c2410c; --s-spx:#2563eb; --s-ew:#6b7280;
-  --pos:#2563eb; --neg:#c2410c;
+  --pos:#15803d; --neg:#c62828;
   --g-lead:#15803d; --g-imp:#1d4ed8; --g-weak:#b45309; --g-lag:#c62828; --on-fill:#fff;
   color-scheme:light;
 }
@@ -84,6 +85,8 @@ tbody tr.sel td{background:var(--card2);box-shadow:inset 3px 0 0 var(--accent)}
 .g-ACCUM{color:var(--g-lead);border-color:var(--g-lead)}
 .g-ACCUM→BUY{color:var(--g-lead);border-color:var(--g-lead)}
 .err{color:var(--neg);padding:30px 0}
+tfoot td{border-top:2px solid var(--border);border-bottom:none;font-weight:600;color:var(--ink);padding-top:10px}
+tfoot tr{cursor:default}
 .st{font-weight:600;font-size:13px;border-radius:20px;padding:1px 9px;border:1px solid var(--border);display:inline-block}
 .st-on{color:var(--accent);border-color:var(--accent)}
 .st-off{color:var(--ink2)}
@@ -310,7 +313,7 @@ function tradeTable(rows, sortable, onPick) {
     const tr = el("tr", {class: SELTRADE && SELTRADE.inst === t.inst && SELTRADE.entry === t.entry ? "sel" : "", tabindex: "0"},
       td(t.inst), td(t.sym, "l mono dim"), el("td", {class: "l"}, pill(t.grade)), td(t.entry, "l mono"),
       td(t.open ? "—" : t.exit, "l mono" + (t.open ? " dim" : "")), td(t.bars), td(t.weight + "%"),
-      pctTd(t.ret), el("td", {class: "mono " + (t.pnl > 0 ? "pos" : t.pnl < 0 ? "neg" : ""), text: money(t.pnl)}),
+      pctTd(t.ret), el("td", {class: "mono " + (t.pnl > 0 ? "pos" : t.pnl < 0 ? "neg" : ""), text: (t.pnl > 0 ? "+" : "") + money(t.pnl)}),
       el("td", {class: "l"}, el("span", {class: "st " + (t.open ? "st-on" : "st-off"), text: t.open ? "On Position" : "Unwind"}),
         t.open ? null : el("span", {class: "dim", text: " · " + t.reason})));
     const pick = () => onPick(t);
@@ -327,7 +330,19 @@ let openHost = null;
 function renderOpen(host) {
   host.replaceChildren();
   if (!D.open.length) host.append(el("div", {class: "empty", text: "ไม่มี position — ทั้งพอร์ตเป็นเงินสด"}));
-  else host.append(el("div", {class: "card tblwrap"}, tradeTable([...D.open].sort((a, b) => b.ret - a.ret), false, pickTrade)));
+  else {
+    const t = tradeTable([...D.open].sort((a, b) => b.ret - a.ret), false, pickTrade);
+    // แถวรวม: ใช้ตัวเลขชุดเดียวกับช่อง Unrealized P/L ด้านบน จะได้ตรงกันเสมอ
+    const L = D.pl || {}, w = D.open.reduce((a, o) => a + (o.weight || 0), 0);
+    const u = L.unrealized, cls = u > 0 ? "pos" : u < 0 ? "neg" : "";
+    t.append(el("tfoot", {}, el("tr", {},
+      el("td", {colspan: "6", class: "l", text: `รวม Unrealized P/L · ${D.open.length} ตัว`}),
+      td(w.toFixed(1) + "%"),
+      el("td", {class: "mono " + cls, text: L.unrealized_pct == null ? "—" : fmt(L.unrealized_pct) + "%"}),
+      el("td", {class: "mono " + cls, text: u == null ? "—" : (u > 0 ? "+" : "") + money(u)}),
+      el("td", {}))));
+    host.append(el("div", {class: "card tblwrap"}, t));
+  }
   if (D.pending.length) host.append(el("div", {class: "meta", style: "margin-top:8px",
     text: "คำสั่งรอส่งพรุ่งนี้: " + D.pending.map(o => `${o.side === "buy" ? "ซื้อ" : "ขาย"} ${o.inst}${o.grade ? " (" + o.grade + ")" : o.reason ? " (" + o.reason + ")" : ""}`).join(" · ")}));
 }
